@@ -4,9 +4,10 @@ import com.odontoflow.entity.Patient;
 import com.odontoflow.exception.BusinessException;
 import com.odontoflow.repository.PatientRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
-import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -22,10 +23,11 @@ public class PatientService {
         return patientRepository.save(patient);
     }
 
-    public List<Patient> findAllActive(){
-        return patientRepository.findAll().stream()
-                .filter(patient -> patient.getDeletedAt() == null)
-                .toList();
+    public Page<Patient> findAllActive(String search, Pageable pageable){
+        if (search == null || search.isBlank()) {
+            return patientRepository.findAllActive(pageable);
+        }
+        return patientRepository.searchActive(search, pageable);
     }
 
     public void delete (UUID id){
@@ -33,5 +35,40 @@ public class PatientService {
                 .orElseThrow(() -> new BusinessException("Paciente não encontrado para exclusão."));
         patient.setDeletedAt(java.time.LocalDateTime.now());
         patientRepository.save(patient);
+    }
+    public Patient findById(UUID id) {
+        Patient patient = patientRepository.findById(id)
+                .orElseThrow(() -> new BusinessException("Paciente não encontrado."));
+
+        if (patient.getDeletedAt() != null) {
+            throw new BusinessException("Paciente não encontrado.");
+        }
+
+        return patient;
+    }
+
+    public Patient update(UUID id, Patient updatedData) {
+        Patient existing = findById(id);
+
+        if (!existing.getCpf().equals(updatedData.getCpf())) {
+            patientRepository.findByCpf(updatedData.getCpf())
+                    .ifPresent(p -> {
+                        throw new BusinessException("Já existe um paciente cadastrado com este CPF.");
+                    });
+        }
+
+        existing.setName(updatedData.getName());
+        existing.setCpf(updatedData.getCpf());
+        existing.setPhone(updatedData.getPhone());
+        existing.setEmail(updatedData.getEmail());
+        existing.setInsurance(updatedData.getInsurance());
+        existing.setStatus(updatedData.getStatus());
+        existing.setLastVisit(updatedData.getLastVisit());
+        existing.setAvatar(updatedData.getAvatar());
+        existing.setBirthDate(updatedData.getBirthDate());
+        existing.setGender(updatedData.getGender());
+        existing.setAddress(updatedData.getAddress());
+
+        return patientRepository.save(existing);
     }
 }
