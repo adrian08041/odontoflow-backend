@@ -21,3 +21,15 @@ server:
   port: 8080
   servlet:
     context-path: /api
+
+# Swagger UI
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+# Configurações customizadas do JWT
+jwt:
+  secret: odontoflow-secret-key-que-deve-ter-pelo-menos-256-bits-para-HS256
+  expiration: 86400000  # 24 horas em milissegundos
