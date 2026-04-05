@@ -19,3 +19,6 @@ server:
 jwt:
   secret: ${JWT_SECRET}
   expiration: 86400000
+
+cors:
+  allowed-origins: ${CORS_ORIGINS:http://localhost:3000}
