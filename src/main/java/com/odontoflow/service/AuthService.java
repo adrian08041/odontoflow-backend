@@ -1,16 +1,25 @@
 package com.odontoflow.service;
 
 import com.odontoflow.config.JwtTokenProvider;
+import com.odontoflow.dto.request.ForgotPasswordRequest;
 import com.odontoflow.dto.request.LoginRequest;
 import com.odontoflow.dto.request.RegisterRequest;
+import com.odontoflow.dto.request.ResetPasswordRequest;
 import com.odontoflow.dto.response.AuthResponse;
+import com.odontoflow.dto.response.MessageResponse;
+import com.odontoflow.entity.PasswordResetToken;
 import com.odontoflow.entity.User;
 import com.odontoflow.entity.enums.UserRole;
 import com.odontoflow.exception.BusinessException;
+import com.odontoflow.repository.PasswordResetTokenRepository;
 import com.odontoflow.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDateTime;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -19,6 +28,8 @@ public class AuthService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
+    private final PasswordResetTokenRepository passwordResetTokenRepository;
+    private final EmailService emailService;
 
     public AuthResponse login(LoginRequest request) {
         User user = userRepository.findByEmail(request.getEmail())
@@ -50,6 +61,42 @@ public class AuthService {
         User savedUser = userRepository.save(user);
 
         return buildAuthResponse(savedUser);
+    }
+
+    @Transactional
+    public MessageResponse forgotPassword(ForgotPasswordRequest request) {
+        userRepository.findByEmail(request.getEmail()).ifPresent(user -> {
+            passwordResetTokenRepository.deleteByUser(user);
+
+            String token = UUID.randomUUID().toString();
+            PasswordResetToken resetToken = new PasswordResetToken(
+                    token, user, LocalDateTime.now().plusMinutes(30));
+            passwordResetTokenRepository.save(resetToken);
+
+            emailService.sendPasswordResetEmail(user.getEmail(), token);
+        });
+
+        return new MessageResponse("Se o e-mail estiver cadastrado, você receberá instruções para redefinir sua senha.");
+    }
+
+    @Transactional
+    public MessageResponse resetPassword(ResetPasswordRequest request) {
+        PasswordResetToken resetToken = passwordResetTokenRepository
+                .findByTokenAndUsedFalse(request.getToken())
+                .orElseThrow(() -> new BusinessException("Token inválido ou já utilizado"));
+
+        if (resetToken.isExpired()) {
+            throw new BusinessException("Token expirado. Solicite uma nova redefinição de senha.");
+        }
+
+        User user = resetToken.getUser();
+        user.setPassword(passwordEncoder.encode(request.getPassword()));
+        userRepository.save(user);
+
+        resetToken.setUsed(true);
+        passwordResetTokenRepository.save(resetToken);
+
+        return new MessageResponse("Senha redefinida com sucesso.");
     }
 
     private AuthResponse buildAuthResponse(User user) {
