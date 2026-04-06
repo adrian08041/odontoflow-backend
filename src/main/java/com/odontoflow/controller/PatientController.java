@@ -24,13 +24,22 @@ public class PatientController {
     private final PatientService patientService;
 
     @GetMapping
-    @Operation(summary = "Listar pacientes", description = "Retorna pacientes ativos com paginação e busca opcional por nome/CPF")
+    @Operation(summary = "Listar pacientes", description = "Retorna pacientes ativos com paginação, busca e filtros")
     @ApiResponse(responseCode = "200", description = "Lista paginada de pacientes")
     public ResponseEntity<Page<Patient>> findAll(
             @RequestParam(required = false) String search,
+            @RequestParam(required = false) String insurance,
+            @RequestParam(required = false) String status,
             @PageableDefault(size = 20, sort = "name") Pageable pageable
     ) {
-        return ResponseEntity.ok(patientService.findAllActive(search, pageable));
+        return ResponseEntity.ok(patientService.findAllActive(search, insurance, status, pageable));
+    }
+
+    @GetMapping("/insurances")
+    @Operation(summary = "Listar seguros", description = "Retorna lista distinta de seguros cadastrados")
+    @ApiResponse(responseCode = "200", description = "Lista de seguros")
+    public ResponseEntity<java.util.List<String>> findInsurances() {
+        return ResponseEntity.ok(patientService.findDistinctInsurances());
     }
 
     @GetMapping("/{id}")

@@ -23,11 +23,15 @@ public class PatientService {
         return patientRepository.save(patient);
     }
 
-    public Page<Patient> findAllActive(String search, Pageable pageable){
-        if (search == null || search.isBlank()) {
-            return patientRepository.findAllActive(pageable);
-        }
-        return patientRepository.searchActive(search, pageable);
+    public Page<Patient> findAllActive(String search, String insurance, String status, Pageable pageable) {
+        String searchParam = (search == null || search.isBlank()) ? null : search;
+        String insuranceParam = (insurance == null || insurance.isBlank()) ? null : insurance;
+        String statusParam = (status == null || status.isBlank()) ? null : status;
+        return patientRepository.findFiltered(searchParam, insuranceParam, statusParam, pageable);
+    }
+
+    public java.util.List<String> findDistinctInsurances() {
+        return patientRepository.findDistinctInsurances();
     }
 
     public void delete (UUID id){
