@@ -10,6 +10,7 @@ import com.odontoflow.entity.Patient;
 import com.odontoflow.repository.AppointmentRepository;
 import com.odontoflow.repository.FinanceReceivableRepository;
 import com.odontoflow.repository.PatientRepository;
+import com.odontoflow.repository.TreatmentPlanRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -36,6 +37,7 @@ public class DashboardService {
     private final AppointmentRepository appointmentRepository;
     private final FinanceReceivableRepository financeRepository;
     private final PatientRepository patientRepository;
+    private final TreatmentPlanRepository treatmentRepository;
     private final FinanceService financeService;
 
     public DashboardSummaryResponse getSummary() {
@@ -87,9 +89,12 @@ public class DashboardService {
         financeService.markOverdue();
         YearMonth currentMonth = YearMonth.from(LocalDate.now());
         BigDecimal revenue = financeRepository.sumRevenueBetween(currentMonth.atDay(1), currentMonth.atEndOfMonth());
-        long completedAppointments = financeRepository.countPaidBetween(currentMonth.atDay(1), currentMonth.atEndOfMonth());
+        long completedTreatments = treatmentRepository.countCompletedBetween(
+                currentMonth.atDay(1).atStartOfDay(),
+                currentMonth.plusMonths(1).atDay(1).atStartOfDay()
+        );
 
-        return new DashboardGoalsResponse(DEFAULT_REVENUE_GOAL, revenue, DEFAULT_TREATMENT_GOAL, completedAppointments);
+        return new DashboardGoalsResponse(DEFAULT_REVENUE_GOAL, revenue, DEFAULT_TREATMENT_GOAL, completedTreatments);
     }
 
     public List<DashboardAlertResponse> getAlerts() {
@@ -143,6 +148,18 @@ public class DashboardService {
                     pendingReturns + (pendingReturns == 1 ? " retorno pendente de confirmação" : " retornos pendentes de confirmação"),
                     pendingReturns,
                     "/agenda"
+            ));
+        }
+
+        long overdueTreatments = treatmentRepository.countOverdue(today);
+        if (overdueTreatments > 0) {
+            alerts.add(new DashboardAlertResponse(
+                    "alert-overdue-treatments",
+                    "overdue_treatments",
+                    "warning",
+                    overdueTreatments + (overdueTreatments == 1 ? " tratamento atrasado" : " tratamentos atrasados"),
+                    overdueTreatments,
+                    "/tratamentos"
             ));
         }
 
