@@ -36,4 +36,14 @@ public interface PatientRepository extends JpaRepository<Patient, UUID> {
 
     @Query("SELECT DISTINCT p.insurance FROM Patient p WHERE p.deletedAt IS NULL AND p.insurance IS NOT NULL ORDER BY p.insurance")
     java.util.List<String> findDistinctInsurances();
+
+    @Query("SELECT p FROM Patient p WHERE p.deletedAt IS NULL AND p.birthDate IS NOT NULL AND " +
+           "EXTRACT(MONTH FROM p.birthDate) = :month AND " +
+           "EXTRACT(DAY FROM p.birthDate) = :day")
+    java.util.List<Patient> findBirthdaysOn(@Param("month") int month, @Param("day") int day);
+
+    @Query("SELECT COUNT(p) FROM Patient p WHERE p.deletedAt IS NULL AND " +
+           "p.createdAt >= :start AND p.createdAt < :end")
+    long countCreatedBetween(@Param("start") java.time.LocalDateTime start,
+                             @Param("end") java.time.LocalDateTime end);
 }
