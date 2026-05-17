@@ -7,6 +7,7 @@ import com.odontoflow.dto.request.InsuranceRequest;
 import com.odontoflow.dto.response.ClinicResponse;
 import com.odontoflow.dto.response.HoursResponse;
 import com.odontoflow.dto.response.InsuranceResponse;
+import com.odontoflow.dto.response.LogoUploadResponse;
 import com.odontoflow.entity.Clinic;
 import com.odontoflow.entity.ClinicHour;
 import com.odontoflow.entity.Insurance;
@@ -16,8 +17,10 @@ import com.odontoflow.repository.InsuranceRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Pattern;
 
@@ -32,8 +35,14 @@ public class SettingsService {
 
     private static final Pattern HH_MM = Pattern.compile("^([01]\\d|2[0-3]):[0-5]\\d$");
 
+    private static final long MAX_LOGO_BYTES = 2L * 1024 * 1024;
+    private static final Set<String> LOGO_TYPES = Set.of(
+            "image/png", "image/jpeg", "image/jpg", "image/webp"
+    );
+
     private final ClinicRepository clinicRepository;
     private final InsuranceRepository insuranceRepository;
+    private final SupabaseStorageService storageService;
 
     @Transactional
     public Clinic ensureDefaults() {
@@ -60,6 +69,51 @@ public class SettingsService {
             clinic.setLogoUrl(request.getLogoUrl());
         }
         return ClinicResponse.from(clinicRepository.save(clinic));
+    }
+
+    @Transactional
+    public LogoUploadResponse uploadLogo(MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw new BusinessException("Envie um arquivo de imagem.");
+        }
+        if (file.getSize() > MAX_LOGO_BYTES) {
+            throw new BusinessException("Logo excede o tamanho máximo de 2 MB.");
+        }
+        String contentType = file.getContentType();
+        if (contentType == null || !LOGO_TYPES.contains(contentType.toLowerCase())) {
+            throw new BusinessException("Tipo inválido para logo. Aceitos: PNG, JPG, JPEG, WEBP.");
+        }
+
+        Clinic clinic = getOrThrow();
+        if (clinic.getLogoUrl() != null && !clinic.getLogoUrl().isBlank()) {
+            String oldPath = extractPathFromUrl(clinic.getLogoUrl());
+            if (oldPath != null) storageService.delete(oldPath);
+        }
+
+        String ext = switch (contentType.toLowerCase()) {
+            case "image/png" -> "png";
+            case "image/webp" -> "webp";
+            default -> "jpg";
+        };
+        String path = "clinic/logos/" + UUID.randomUUID() + "." + ext;
+
+        byte[] bytes;
+        try {
+            bytes = file.getBytes();
+        } catch (Exception e) {
+            throw new BusinessException("Falha ao ler o arquivo enviado.");
+        }
+        String publicUrl = storageService.upload(bytes, path, contentType);
+        clinic.setLogoUrl(publicUrl);
+        clinicRepository.save(clinic);
+        return new LogoUploadResponse(publicUrl);
+    }
+
+    private String extractPathFromUrl(String url) {
+        int idx = url.indexOf("/object/public/");
+        if (idx < 0) return null;
+        int after = url.indexOf("/", idx + "/object/public/".length());
+        return after < 0 ? null : url.substring(after + 1);
     }
 
     @Transactional(readOnly = true)

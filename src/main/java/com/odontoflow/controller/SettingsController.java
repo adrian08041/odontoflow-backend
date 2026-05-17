@@ -6,6 +6,7 @@ import com.odontoflow.dto.request.InsuranceRequest;
 import com.odontoflow.dto.response.ClinicResponse;
 import com.odontoflow.dto.response.HoursResponse;
 import com.odontoflow.dto.response.InsuranceResponse;
+import com.odontoflow.dto.response.LogoUploadResponse;
 import com.odontoflow.service.SettingsService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -20,7 +21,9 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.UUID;
@@ -48,6 +51,14 @@ public class SettingsController {
     @ApiResponse(responseCode = "400", description = "Validação falhou")
     public ResponseEntity<ClinicResponse> updateClinic(@RequestBody ClinicRequest request) {
         return ResponseEntity.ok(settingsService.updateClinic(request));
+    }
+
+    @PostMapping(value = "/clinic/logo", consumes = "multipart/form-data")
+    @Operation(summary = "Upload do logo", description = "multipart/form-data com campo 'file'. Aceitos: PNG, JPG, JPEG, WEBP. Máx. 2 MB. Logo anterior é removido do storage.")
+    @ApiResponse(responseCode = "200", description = "Logo enviado")
+    @ApiResponse(responseCode = "400", description = "Arquivo inválido")
+    public ResponseEntity<LogoUploadResponse> uploadLogo(@RequestParam("file") MultipartFile file) {
+        return ResponseEntity.ok(settingsService.uploadLogo(file));
     }
 
     // ---------- Horários ----------
