@@ -25,4 +25,27 @@ public interface AppointmentRepository extends JpaRepository<Appointment, UUID> 
 
     @Query("SELECT a FROM Appointment a WHERE a.id = :id AND a.deletedAt IS NULL")
     Optional<Appointment> findActiveById(@Param("id") UUID id);
+
+    @Query("SELECT a FROM Appointment a WHERE a.deletedAt IS NULL AND a.date = :date " +
+           "ORDER BY a.time ASC")
+    List<Appointment> findByDate(@Param("date") LocalDate date);
+
+    @Query("SELECT COUNT(a) FROM Appointment a WHERE a.deletedAt IS NULL AND a.date = :date")
+    long countByDate(@Param("date") LocalDate date);
+
+    @Query("SELECT COUNT(a) FROM Appointment a WHERE a.deletedAt IS NULL AND a.date = :date AND a.status = :status")
+    long countByDateAndStatus(@Param("date") LocalDate date, @Param("status") String status);
+
+    @Query("SELECT a.date as dia, COUNT(a) as qtd FROM Appointment a WHERE a.deletedAt IS NULL AND " +
+           "a.date BETWEEN :start AND :end GROUP BY a.date")
+    List<Object[]> countByDateBetween(@Param("start") LocalDate start, @Param("end") LocalDate end);
+
+    @Query("SELECT COUNT(a) FROM Appointment a WHERE a.deletedAt IS NULL AND " +
+           "a.date = :date AND a.status = 'Pendente'")
+    long countUnconfirmedOn(@Param("date") LocalDate date);
+
+    @Query("SELECT COUNT(a) FROM Appointment a WHERE a.deletedAt IS NULL AND " +
+           "a.type = com.odontoflow.entity.enums.AppointmentType.RETURN AND " +
+           "a.date >= :today AND a.status = 'Pendente'")
+    long countPendingReturnsFrom(@Param("today") LocalDate today);
 }
