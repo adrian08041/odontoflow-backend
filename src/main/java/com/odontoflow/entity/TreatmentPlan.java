@@ -68,6 +68,8 @@ public class TreatmentPlan {
     @Column(updatable = false)
     private LocalDateTime createdAt;
 
+    private LocalDateTime completedAt;
+
     private LocalDateTime deletedAt;
 
     @OneToMany(

@@ -12,6 +12,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -30,6 +31,7 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/appointments")
 @RequiredArgsConstructor
+@PreAuthorize("hasAnyRole('ADMIN', 'DENTISTA', 'RECEPCIONISTA')")
 @Tag(name = "Agendamentos", description = "CRUD de agendamentos da clínica")
 public class AppointmentController {
 
@@ -55,6 +57,7 @@ public class AppointmentController {
     }
 
     @PostMapping
+    @PreAuthorize("hasAnyRole('ADMIN', 'RECEPCIONISTA')")
     @Operation(summary = "Criar agendamento", description = "Cadastra um novo agendamento. Valida existência de paciente e dentista")
     @ApiResponse(responseCode = "201", description = "Agendamento criado com sucesso")
     @ApiResponse(responseCode = "400", description = "Paciente/dentista não encontrado ou duração inválida")
@@ -64,6 +67,7 @@ public class AppointmentController {
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'RECEPCIONISTA')")
     @Operation(summary = "Atualizar agendamento", description = "Atualiza todos os dados de um agendamento existente")
     @ApiResponse(responseCode = "200", description = "Agendamento atualizado")
     @ApiResponse(responseCode = "400", description = "Agendamento/paciente/dentista não encontrado")
@@ -72,6 +76,7 @@ public class AppointmentController {
     }
 
     @PatchMapping("/{id}/reschedule")
+    @PreAuthorize("hasAnyRole('ADMIN', 'RECEPCIONISTA')")
     @Operation(summary = "Reagendar", description = "Atualiza apenas data e hora — usado no drag & drop da agenda")
     @ApiResponse(responseCode = "200", description = "Agendamento reagendado")
     @ApiResponse(responseCode = "400", description = "Agendamento não encontrado")
@@ -80,6 +85,7 @@ public class AppointmentController {
     }
 
     @PatchMapping("/{id}/status")
+    @PreAuthorize("hasAnyRole('ADMIN', 'RECEPCIONISTA')")
     @Operation(summary = "Alterar status", description = "Atualiza apenas o status (Confirmado/Pendente/Cancelado)")
     @ApiResponse(responseCode = "200", description = "Status atualizado")
     @ApiResponse(responseCode = "400", description = "Agendamento não encontrado")
@@ -88,6 +94,7 @@ public class AppointmentController {
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'RECEPCIONISTA')")
     @Operation(summary = "Cancelar agendamento", description = "Soft delete — marca deletedAt, preserva histórico clínico")
     @ApiResponse(responseCode = "204", description = "Agendamento cancelado com sucesso")
     @ApiResponse(responseCode = "400", description = "Agendamento não encontrado")

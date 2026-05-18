@@ -1,5 +1,6 @@
 package com.odontoflow.dto.request;
 
+import com.odontoflow.entity.enums.FinanceStatus;
 import com.odontoflow.entity.enums.TransactionType;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -25,4 +26,5 @@ public class NewTransactionRequest {
     private String category;
     private String installments;
     private String notes;
+    private FinanceStatus status;
 }

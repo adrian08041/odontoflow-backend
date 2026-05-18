@@ -30,7 +30,8 @@ public interface TreatmentPlanRepository extends JpaRepository<TreatmentPlan, UU
 
     @Query("SELECT COUNT(p) FROM TreatmentPlan p WHERE p.deletedAt IS NULL AND " +
            "p.totalProcedures > 0 AND p.completed >= p.totalProcedures AND " +
-           "p.createdAt >= :start AND p.createdAt < :end")
+           "p.completedAt IS NOT NULL AND " +
+           "p.completedAt >= :start AND p.completedAt < :end")
     long countCompletedBetween(
             @Param("start") java.time.LocalDateTime start,
             @Param("end") java.time.LocalDateTime end

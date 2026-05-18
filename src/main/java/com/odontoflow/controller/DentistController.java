@@ -8,6 +8,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -23,6 +24,7 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/dentists")
 @RequiredArgsConstructor
+@PreAuthorize("hasAnyRole('ADMIN', 'DENTISTA', 'RECEPCIONISTA')")
 @Tag(name = "Dentistas", description = "CRUD de dentistas da clínica")
 public class DentistController {
 
@@ -44,6 +46,7 @@ public class DentistController {
     }
 
     @PostMapping
+    @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "Criar dentista", description = "Cadastra um novo dentista")
     @ApiResponse(responseCode = "201", description = "Dentista criado com sucesso")
     public ResponseEntity<Dentist> create(@RequestBody Dentist dentist) {
@@ -52,6 +55,7 @@ public class DentistController {
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "Atualizar dentista", description = "Atualiza os dados de um dentista existente")
     @ApiResponse(responseCode = "200", description = "Dentista atualizado com sucesso")
     @ApiResponse(responseCode = "400", description = "Dentista não encontrado")
@@ -60,6 +64,7 @@ public class DentistController {
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "Remover dentista", description = "Soft delete — marca deletedAt, não remove do banco")
     @ApiResponse(responseCode = "204", description = "Dentista removido com sucesso")
     @ApiResponse(responseCode = "400", description = "Dentista não encontrado")

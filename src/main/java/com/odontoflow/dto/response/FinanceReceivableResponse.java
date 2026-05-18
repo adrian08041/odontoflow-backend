@@ -24,6 +24,7 @@ public class FinanceReceivableResponse {
     private String description;
     private BigDecimal value;
     private LocalDate due;
+    private LocalDate paidAt;
     private FinanceStatus status;
     private TransactionType type;
     private String method;
@@ -40,6 +41,7 @@ public class FinanceReceivableResponse {
                 r.getDescription(),
                 r.getValue(),
                 r.getDue(),
+                r.getPaidAt(),
                 r.getStatus(),
                 r.getType(),
                 r.getMethod(),

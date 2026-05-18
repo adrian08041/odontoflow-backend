@@ -2,6 +2,7 @@ package com.odontoflow.repository;
 
 import com.odontoflow.entity.FinanceReceivable;
 import com.odontoflow.entity.enums.FinanceStatus;
+import com.odontoflow.entity.enums.TransactionType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -17,10 +18,12 @@ import java.util.UUID;
 public interface FinanceReceivableRepository extends JpaRepository<FinanceReceivable, UUID> {
 
     @Query("SELECT r FROM FinanceReceivable r WHERE r.deletedAt IS NULL AND " +
-           "(:status IS NULL OR r.status = :status) " +
+           "(:status IS NULL OR r.status = :status) AND " +
+           "(:type IS NULL OR r.type = :type) " +
            "ORDER BY r.due DESC")
     Page<FinanceReceivable> findAllFiltered(
             @Param("status") FinanceStatus status,
+            @Param("type") TransactionType type,
             Pageable pageable
     );
 
@@ -34,7 +37,7 @@ public interface FinanceReceivableRepository extends JpaRepository<FinanceReceiv
 
     @Query("SELECT COALESCE(SUM(r.value), 0) FROM FinanceReceivable r WHERE r.deletedAt IS NULL AND " +
            "r.status = com.odontoflow.entity.enums.FinanceStatus.Pago AND " +
-           "r.due BETWEEN :start AND :end")
+           "COALESCE(r.paidAt, r.due) BETWEEN :start AND :end")
     BigDecimal sumRevenueBetween(@Param("start") LocalDate start, @Param("end") LocalDate end);
 
     @Query("SELECT COALESCE(SUM(r.value), 0) FROM FinanceReceivable r WHERE r.deletedAt IS NULL AND " +
@@ -52,7 +55,7 @@ public interface FinanceReceivableRepository extends JpaRepository<FinanceReceiv
 
     @Query("SELECT COUNT(r) FROM FinanceReceivable r WHERE r.deletedAt IS NULL AND " +
            "r.status = com.odontoflow.entity.enums.FinanceStatus.Pago AND " +
-           "r.due BETWEEN :start AND :end")
+           "COALESCE(r.paidAt, r.due) BETWEEN :start AND :end")
     long countPaidBetween(@Param("start") LocalDate start, @Param("end") LocalDate end);
 
     @Query("SELECT COALESCE(r.method, 'Outros') as method, COUNT(r) as qtd " +
