@@ -6,8 +6,10 @@ import com.odontoflow.dto.response.DashboardGoalsResponse;
 import com.odontoflow.dto.response.DashboardSummaryResponse;
 import com.odontoflow.dto.response.WeeklyChartResponse;
 import com.odontoflow.entity.Appointment;
+import com.odontoflow.entity.Clinic;
 import com.odontoflow.entity.Patient;
 import com.odontoflow.repository.AppointmentRepository;
+import com.odontoflow.repository.ClinicRepository;
 import com.odontoflow.repository.FinanceReceivableRepository;
 import com.odontoflow.repository.PatientRepository;
 import com.odontoflow.repository.TreatmentPlanRepository;
@@ -31,14 +33,14 @@ import java.util.Map;
 public class DashboardService {
 
     private static final Locale PT_BR = Locale.of("pt", "BR");
-    private static final BigDecimal DEFAULT_REVENUE_GOAL = new BigDecimal("50000");
-    private static final long DEFAULT_TREATMENT_GOAL = 80;
+    private static final BigDecimal FALLBACK_REVENUE_GOAL = new BigDecimal("50000");
+    private static final long FALLBACK_TREATMENT_GOAL = 80L;
 
     private final AppointmentRepository appointmentRepository;
     private final FinanceReceivableRepository financeRepository;
     private final PatientRepository patientRepository;
     private final TreatmentPlanRepository treatmentRepository;
-    private final FinanceService financeService;
+    private final ClinicRepository clinicRepository;
 
     public DashboardSummaryResponse getSummary() {
         LocalDate today = LocalDate.now();
@@ -86,7 +88,6 @@ public class DashboardService {
     }
 
     public DashboardGoalsResponse getGoals() {
-        financeService.markOverdue();
         YearMonth currentMonth = YearMonth.from(LocalDate.now());
         BigDecimal revenue = financeRepository.sumRevenueBetween(currentMonth.atDay(1), currentMonth.atEndOfMonth());
         long completedTreatments = treatmentRepository.countCompletedBetween(
@@ -94,11 +95,18 @@ public class DashboardService {
                 currentMonth.plusMonths(1).atDay(1).atStartOfDay()
         );
 
-        return new DashboardGoalsResponse(DEFAULT_REVENUE_GOAL, revenue, DEFAULT_TREATMENT_GOAL, completedTreatments);
+        BigDecimal revenueGoal = FALLBACK_REVENUE_GOAL;
+        long treatmentGoal = FALLBACK_TREATMENT_GOAL;
+        Clinic clinic = clinicRepository.findFirstByOrderByCreatedAtAsc().orElse(null);
+        if (clinic != null) {
+            if (clinic.getRevenueGoal() != null) revenueGoal = clinic.getRevenueGoal();
+            if (clinic.getTreatmentGoal() != null) treatmentGoal = clinic.getTreatmentGoal();
+        }
+
+        return new DashboardGoalsResponse(revenueGoal, revenue, treatmentGoal, completedTreatments);
     }
 
     public List<DashboardAlertResponse> getAlerts() {
-        financeService.markOverdue();
         LocalDate today = LocalDate.now();
         LocalDate tomorrow = today.plusDays(1);
         List<DashboardAlertResponse> alerts = new ArrayList<>();

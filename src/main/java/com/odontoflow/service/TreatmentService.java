@@ -1,5 +1,6 @@
 package com.odontoflow.service;
 
+import com.odontoflow.dto.request.ProcedureStatusRequest;
 import com.odontoflow.dto.request.TreatmentPlanRequest;
 import com.odontoflow.dto.request.TreatmentProcedureRequest;
 import com.odontoflow.dto.response.TreatmentPlanResponse;
@@ -123,6 +124,24 @@ public class TreatmentService {
     }
 
     @Transactional
+    public TreatmentPlanResponse updateProcedure(UUID planId, UUID procedureId, ProcedureStatusRequest request) {
+        if (request.getPaid() == null && request.getDone() == null) {
+            throw new BusinessException("Informe ao menos um campo (paid ou done) para atualizar.");
+        }
+        TreatmentPlan plan = getOrThrow(planId);
+        TreatmentProcedure target = plan.getProcedures().stream()
+                .filter(p -> procedureId.equals(p.getId()))
+                .findFirst()
+                .orElseThrow(() -> new BusinessException("Procedimento não encontrado neste plano."));
+
+        if (request.getPaid() != null) target.setPaid(request.getPaid());
+        if (request.getDone() != null) target.setDone(request.getDone());
+
+        recalculateTotals(plan);
+        return TreatmentPlanResponse.from(repository.save(plan));
+    }
+
+    @Transactional
     public void delete(UUID id) {
         TreatmentPlan plan = getOrThrow(id);
         plan.setDeletedAt(LocalDateTime.now());
@@ -188,5 +207,13 @@ public class TreatmentService {
         plan.setTotal(total);
         plan.setCompleted(done);
         plan.setTotalProcedures(plan.getProcedures().size());
+
+        boolean wasComplete = plan.getCompletedAt() != null;
+        boolean isComplete = plan.getTotalProcedures() > 0 && plan.getCompleted() >= plan.getTotalProcedures();
+        if (isComplete && !wasComplete) {
+            plan.setCompletedAt(LocalDateTime.now());
+        } else if (!isComplete && wasComplete) {
+            plan.setCompletedAt(null);
+        }
     }
 }

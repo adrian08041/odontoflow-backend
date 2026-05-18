@@ -6,6 +6,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.math.BigDecimal;
 import java.util.UUID;
 
 @Getter
@@ -21,6 +22,8 @@ public class ClinicResponse {
     private String email;
     private String website;
     private String logoUrl;
+    private BigDecimal revenueGoal;
+    private Long treatmentGoal;
 
     public static ClinicResponse from(Clinic c) {
         return new ClinicResponse(
@@ -31,7 +34,9 @@ public class ClinicResponse {
                 c.getEndereco(),
                 c.getEmail(),
                 c.getWebsite(),
-                c.getLogoUrl()
+                c.getLogoUrl(),
+                c.getRevenueGoal(),
+                c.getTreatmentGoal()
         );
     }
 }

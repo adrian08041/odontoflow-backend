@@ -67,6 +67,8 @@ public class FinanceReceivable {
     @Column(length = 1000)
     private String notes;
 
+    private LocalDate paidAt;
+
     @CreationTimestamp
     @Column(updatable = false)
     private LocalDateTime createdAt;

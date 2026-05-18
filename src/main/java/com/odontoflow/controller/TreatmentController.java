@@ -1,5 +1,6 @@
 package com.odontoflow.controller;
 
+import com.odontoflow.dto.request.ProcedureStatusRequest;
 import com.odontoflow.dto.request.TreatmentPlanRequest;
 import com.odontoflow.dto.response.TreatmentPlanResponse;
 import com.odontoflow.service.TreatmentService;
@@ -12,6 +13,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -28,6 +30,7 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/treatments")
 @RequiredArgsConstructor
+@PreAuthorize("hasAnyRole('ADMIN', 'DENTISTA', 'RECEPCIONISTA')")
 @Tag(name = "Tratamentos", description = "Planos de tratamento e procedimentos")
 public class TreatmentController {
 
@@ -54,6 +57,7 @@ public class TreatmentController {
     }
 
     @PostMapping
+    @PreAuthorize("hasAnyRole('ADMIN', 'DENTISTA')")
     @Operation(summary = "Criar plano", description = "Cria um plano com seus procedimentos. Total/completed/totalProcedures são calculados.")
     @ApiResponse(responseCode = "201", description = "Plano criado")
     @ApiResponse(responseCode = "400", description = "Validação falhou (título, paciente, datas ou procedimentos)")
@@ -63,6 +67,7 @@ public class TreatmentController {
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'DENTISTA')")
     @Operation(summary = "Atualizar plano", description = "Substitui dados e procedimentos do plano")
     @ApiResponse(responseCode = "200", description = "Plano atualizado")
     @ApiResponse(responseCode = "400", description = "Plano não encontrado ou validação falhou")
@@ -74,6 +79,7 @@ public class TreatmentController {
     }
 
     @PatchMapping("/{id}/approve-step")
+    @PreAuthorize("hasAnyRole('ADMIN', 'DENTISTA')")
     @Operation(summary = "Aprovar etapa", description = "Marca o próximo procedimento pendente como concluído")
     @ApiResponse(responseCode = "200", description = "Etapa aprovada e progresso atualizado")
     @ApiResponse(responseCode = "400", description = "Plano não encontrado ou nenhuma etapa pendente")
@@ -81,7 +87,21 @@ public class TreatmentController {
         return ResponseEntity.ok(treatmentService.approveStep(id));
     }
 
+    @PatchMapping("/{id}/procedures/{procedureId}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'DENTISTA')")
+    @Operation(summary = "Atualizar procedimento", description = "Atualização parcial dos flags `paid` e/ou `done` de um procedimento específico")
+    @ApiResponse(responseCode = "200", description = "Procedimento atualizado e progresso recalculado")
+    @ApiResponse(responseCode = "400", description = "Plano/procedimento não encontrado ou nenhum campo informado")
+    public ResponseEntity<TreatmentPlanResponse> updateProcedure(
+            @PathVariable UUID id,
+            @PathVariable UUID procedureId,
+            @RequestBody ProcedureStatusRequest request
+    ) {
+        return ResponseEntity.ok(treatmentService.updateProcedure(id, procedureId, request));
+    }
+
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'DENTISTA')")
     @Operation(summary = "Excluir plano", description = "Soft delete — preserva histórico clínico")
     @ApiResponse(responseCode = "204", description = "Plano excluído")
     @ApiResponse(responseCode = "400", description = "Plano não encontrado")

@@ -28,6 +28,7 @@ public class TreatmentPlanResponse {
     private int completed;
     private int totalProcedures;
     private LocalDateTime createdAt;
+    private LocalDateTime completedAt;
     private List<TreatmentProcedureResponse> procedures;
 
     public static TreatmentPlanResponse from(TreatmentPlan p) {
@@ -43,6 +44,7 @@ public class TreatmentPlanResponse {
                 p.getCompleted(),
                 p.getTotalProcedures(),
                 p.getCreatedAt(),
+                p.getCompletedAt(),
                 p.getProcedures().stream().map(TreatmentProcedureResponse::from).toList()
         );
     }

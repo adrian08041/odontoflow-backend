@@ -68,6 +68,18 @@ public class SettingsService {
         if (request.getLogoUrl() != null) {
             clinic.setLogoUrl(request.getLogoUrl());
         }
+        if (request.getRevenueGoal() != null) {
+            if (request.getRevenueGoal().signum() < 0) {
+                throw new BusinessException("A meta de faturamento não pode ser negativa.");
+            }
+            clinic.setRevenueGoal(request.getRevenueGoal());
+        }
+        if (request.getTreatmentGoal() != null) {
+            if (request.getTreatmentGoal() < 0) {
+                throw new BusinessException("A meta de tratamentos não pode ser negativa.");
+            }
+            clinic.setTreatmentGoal(request.getTreatmentGoal());
+        }
         return ClinicResponse.from(clinicRepository.save(clinic));
     }
 

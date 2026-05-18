@@ -18,6 +18,7 @@ import org.hibernate.annotations.BatchSize;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -59,6 +60,12 @@ public class Clinic {
 
     @Column(nullable = false)
     private String intervalo = "15 min";
+
+    @Column(nullable = false, precision = 12, scale = 2, columnDefinition = "NUMERIC(12,2) DEFAULT 50000.00")
+    private BigDecimal revenueGoal = new BigDecimal("50000.00");
+
+    @Column(nullable = false, columnDefinition = "BIGINT DEFAULT 80")
+    private Long treatmentGoal = 80L;
 
     @CreationTimestamp
     @Column(updatable = false)

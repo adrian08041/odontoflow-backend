@@ -11,6 +11,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.UUID;
@@ -18,6 +19,7 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/patients")
 @RequiredArgsConstructor
+@PreAuthorize("hasAnyRole('ADMIN', 'DENTISTA', 'RECEPCIONISTA')")
 @Tag(name = "Pacientes", description = "CRUD de pacientes da clínica")
 public class PatientController {
 
@@ -60,10 +62,12 @@ public class PatientController {
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "Remover paciente", description = "Soft delete — marca deletedAt, não remove do banco")
     @ApiResponse(responseCode = "204", description = "Paciente removido com sucesso")
     @ApiResponse(responseCode = "400", description = "Paciente não encontrado")
-    public ResponseEntity<Void> delete(@PathVariable UUID id) {patientService.delete(id);
+    public ResponseEntity<Void> delete(@PathVariable UUID id) {
+        patientService.delete(id);
         return ResponseEntity.noContent().build();
     }
 

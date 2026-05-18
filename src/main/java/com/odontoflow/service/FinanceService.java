@@ -9,11 +9,14 @@ import com.odontoflow.dto.response.RevenueHistoryResponse;
 import com.odontoflow.entity.FinanceReceivable;
 import com.odontoflow.entity.Patient;
 import com.odontoflow.entity.enums.FinanceStatus;
+import com.odontoflow.entity.enums.TransactionType;
 import com.odontoflow.exception.BusinessException;
 import com.odontoflow.repository.FinanceReceivableRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,11 +32,13 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class FinanceService {
 
     private static final Locale PT_BR = Locale.of("pt", "BR");
+    private static final String DEFAULT_EXPENSE_PAYER = "Clínica";
 
     private static final Map<String, String> METHOD_COLORS = Map.of(
             "PIX", "#10b981",
@@ -47,10 +52,9 @@ public class FinanceService {
     private final FinanceReceivableRepository repository;
     private final PatientService patientService;
 
-    @Transactional
-    public Page<FinanceReceivableResponse> findAll(FinanceStatus status, Pageable pageable) {
-        markOverdue();
-        return repository.findAllFiltered(status, pageable).map(FinanceReceivableResponse::from);
+    @Transactional(readOnly = true)
+    public Page<FinanceReceivableResponse> findAll(FinanceStatus status, TransactionType type, Pageable pageable) {
+        return repository.findAllFiltered(status, type, pageable).map(FinanceReceivableResponse::from);
     }
 
     public FinanceReceivable findById(UUID id) {
@@ -71,17 +75,7 @@ public class FinanceService {
         }
 
         FinanceReceivable receivable = new FinanceReceivable();
-
-        if (request.getPatientId() != null) {
-            Patient patient = patientService.findById(request.getPatientId());
-            receivable.setPatient(patient);
-            receivable.setPatientName(patient.getName());
-        } else {
-            if (request.getPatient() == null || request.getPatient().isBlank()) {
-                throw new BusinessException("Informe o paciente (patientId ou patient).");
-            }
-            receivable.setPatientName(request.getPatient());
-        }
+        bindPayer(receivable, request);
 
         receivable.setDescription(request.getDescription());
         receivable.setValue(request.getAmount());
@@ -91,9 +85,34 @@ public class FinanceService {
         receivable.setCategory(request.getCategory());
         receivable.setInstallments(request.getInstallments());
         receivable.setNotes(request.getNotes());
-        receivable.setStatus(resolveInitialStatus(request.getDueDate()));
+
+        FinanceStatus initial = request.getStatus() != null
+                ? request.getStatus()
+                : resolveInitialStatus(request.getDueDate());
+        receivable.setStatus(initial);
+        if (initial == FinanceStatus.Pago) {
+            receivable.setPaidAt(LocalDate.now());
+        }
 
         return FinanceReceivableResponse.from(repository.save(receivable));
+    }
+
+    private void bindPayer(FinanceReceivable receivable, NewTransactionRequest request) {
+        if (request.getPatientId() != null) {
+            Patient patient = patientService.findById(request.getPatientId());
+            receivable.setPatient(patient);
+            receivable.setPatientName(patient.getName());
+            return;
+        }
+        if (request.getPatient() != null && !request.getPatient().isBlank()) {
+            receivable.setPatientName(request.getPatient().trim());
+            return;
+        }
+        if (request.getType() == TransactionType.despesa) {
+            receivable.setPatientName(DEFAULT_EXPENSE_PAYER);
+            return;
+        }
+        throw new BusinessException("Informe o paciente (patientId ou patient).");
     }
 
     @Transactional
@@ -102,7 +121,15 @@ public class FinanceService {
             throw new BusinessException("O status é obrigatório.");
         }
         FinanceReceivable receivable = findById(id);
-        receivable.setStatus(request.getStatus());
+        FinanceStatus target = request.getStatus();
+        receivable.setStatus(target);
+        if (target == FinanceStatus.Pago) {
+            if (receivable.getPaidAt() == null) {
+                receivable.setPaidAt(LocalDate.now());
+            }
+        } else {
+            receivable.setPaidAt(null);
+        }
         return FinanceReceivableResponse.from(repository.save(receivable));
     }
 
@@ -113,9 +140,8 @@ public class FinanceService {
         repository.save(receivable);
     }
 
-    @Transactional
+    @Transactional(readOnly = true)
     public FinanceStatsResponse getStats() {
-        markOverdue();
         LocalDate today = LocalDate.now();
         YearMonth currentMonth = YearMonth.from(today);
         YearMonth previousMonth = currentMonth.minusMonths(1);
@@ -164,6 +190,7 @@ public class FinanceService {
         return result;
     }
 
+    @Scheduled(cron = "0 5 1 * * *", zone = "America/Sao_Paulo")
     @Transactional
     public void markOverdue() {
         LocalDate today = LocalDate.now();
@@ -173,6 +200,7 @@ public class FinanceService {
         }
         if (!overdue.isEmpty()) {
             repository.saveAll(overdue);
+            log.info("markOverdue: {} pendência(s) marcada(s) como Atrasado.", overdue.size());
         }
     }
 
