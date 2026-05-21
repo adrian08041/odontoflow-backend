@@ -7,8 +7,10 @@ import com.odontoflow.dto.response.TreatmentPlanResponse;
 import com.odontoflow.entity.Patient;
 import com.odontoflow.entity.TreatmentPlan;
 import com.odontoflow.entity.TreatmentProcedure;
+import com.odontoflow.entity.enums.AuditAction;
 import com.odontoflow.exception.BusinessException;
 import com.odontoflow.repository.TreatmentPlanRepository;
+import com.odontoflow.util.AuditChanges;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -30,6 +32,7 @@ public class TreatmentService {
 
     private final TreatmentPlanRepository repository;
     private final PatientService patientService;
+    private final AuditLogService auditLogService;
 
     @Transactional(readOnly = true)
     public Page<TreatmentPlanResponse> findAll(String search, Pageable pageable) {
@@ -58,13 +61,18 @@ public class TreatmentService {
         }
 
         recalculateTotals(plan);
-        return TreatmentPlanResponse.from(repository.saveAndFlush(plan));
+        TreatmentPlan saved = repository.saveAndFlush(plan);
+        auditLogService.log("TreatmentPlan", saved.getId(), AuditAction.CREATE,
+                AuditChanges.after(AuditChanges.snapshot(saved)));
+        return TreatmentPlanResponse.from(saved);
     }
 
     @Transactional
     public TreatmentPlanResponse update(UUID id, TreatmentPlanRequest request) {
         validate(request);
         TreatmentPlan plan = getOrThrow(id);
+
+        Map<String, Object> before = AuditChanges.snapshot(plan);
 
         bindPatient(plan, request);
         plan.setTitle(request.getTitle());
@@ -74,7 +82,10 @@ public class TreatmentService {
 
         mergeProcedures(plan, request.getProcedures());
         recalculateTotals(plan);
-        return TreatmentPlanResponse.from(repository.save(plan));
+        TreatmentPlan saved = repository.save(plan);
+        auditLogService.log("TreatmentPlan", saved.getId(), AuditAction.UPDATE,
+                AuditChanges.diff(before, AuditChanges.snapshot(saved)));
+        return TreatmentPlanResponse.from(saved);
     }
 
     private void mergeProcedures(TreatmentPlan plan, List<TreatmentProcedureRequest> reqProcs) {
@@ -120,7 +131,13 @@ public class TreatmentService {
 
         next.setDone(true);
         recalculateTotals(plan);
-        return TreatmentPlanResponse.from(repository.save(plan));
+        TreatmentPlan saved = repository.save(plan);
+        auditLogService.log("TreatmentPlan", saved.getId(), AuditAction.UPDATE,
+                Map.of("approvedProcedureId", next.getId(),
+                        "approvedProcedureName", next.getName(),
+                        "completed", saved.getCompleted(),
+                        "totalProcedures", saved.getTotalProcedures()));
+        return TreatmentPlanResponse.from(saved);
     }
 
     @Transactional
@@ -134,18 +151,25 @@ public class TreatmentService {
                 .findFirst()
                 .orElseThrow(() -> new BusinessException("Procedimento não encontrado neste plano."));
 
+        Map<String, Object> before = AuditChanges.snapshot(target);
         if (request.getPaid() != null) target.setPaid(request.getPaid());
         if (request.getDone() != null) target.setDone(request.getDone());
 
         recalculateTotals(plan);
-        return TreatmentPlanResponse.from(repository.save(plan));
+        TreatmentPlan saved = repository.save(plan);
+        auditLogService.log("TreatmentProcedure", target.getId(), AuditAction.UPDATE,
+                AuditChanges.diff(before, AuditChanges.snapshot(target)));
+        return TreatmentPlanResponse.from(saved);
     }
 
     @Transactional
     public void delete(UUID id) {
         TreatmentPlan plan = getOrThrow(id);
+        Map<String, Object> before = AuditChanges.snapshot(plan);
         plan.setDeletedAt(LocalDateTime.now());
         repository.save(plan);
+        auditLogService.log("TreatmentPlan", plan.getId(), AuditAction.DELETE,
+                AuditChanges.before(before));
     }
 
     private TreatmentPlan getOrThrow(UUID id) {

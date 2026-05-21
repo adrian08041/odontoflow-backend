@@ -11,15 +11,18 @@ import com.odontoflow.dto.response.LogoUploadResponse;
 import com.odontoflow.entity.Clinic;
 import com.odontoflow.entity.ClinicHour;
 import com.odontoflow.entity.Insurance;
+import com.odontoflow.entity.enums.AuditAction;
 import com.odontoflow.exception.BusinessException;
 import com.odontoflow.repository.ClinicRepository;
 import com.odontoflow.repository.InsuranceRepository;
+import com.odontoflow.util.AuditChanges;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Pattern;
@@ -43,6 +46,7 @@ public class SettingsService {
     private final ClinicRepository clinicRepository;
     private final InsuranceRepository insuranceRepository;
     private final SupabaseStorageService storageService;
+    private final AuditLogService auditLogService;
 
     @Transactional
     public Clinic ensureDefaults() {
@@ -59,6 +63,7 @@ public class SettingsService {
     public ClinicResponse updateClinic(ClinicRequest request) {
         validateClinic(request);
         Clinic clinic = getOrThrow();
+        Map<String, Object> before = AuditChanges.snapshot(clinic);
         clinic.setNomeFantasia(request.getNomeFantasia().trim());
         clinic.setCnpj(onlyDigits(request.getCnpj()));
         clinic.setTelefone(onlyDigits(request.getTelefone()));
@@ -80,7 +85,10 @@ public class SettingsService {
             }
             clinic.setTreatmentGoal(request.getTreatmentGoal());
         }
-        return ClinicResponse.from(clinicRepository.save(clinic));
+        Clinic saved = clinicRepository.save(clinic);
+        auditLogService.log("Clinic", saved.getId(), AuditAction.UPDATE,
+                AuditChanges.diff(before, AuditChanges.snapshot(saved)));
+        return ClinicResponse.from(saved);
     }
 
     @Transactional
@@ -118,6 +126,8 @@ public class SettingsService {
         String publicUrl = storageService.upload(bytes, path, contentType);
         clinic.setLogoUrl(publicUrl);
         clinicRepository.save(clinic);
+        auditLogService.log("Clinic", clinic.getId(), AuditAction.UPDATE,
+                Map.of("field", "logoUrl", "logoUrl", publicUrl));
         return new LogoUploadResponse(publicUrl);
     }
 
@@ -155,7 +165,13 @@ public class SettingsService {
             clinic.getHours().add(h);
         }
 
-        return HoursResponse.from(clinicRepository.save(clinic));
+        Clinic saved = clinicRepository.save(clinic);
+        auditLogService.log("Clinic", saved.getId(), AuditAction.UPDATE,
+                Map.of("field", "hours",
+                        "duracaoConsulta", saved.getDuracaoConsulta(),
+                        "intervalo", saved.getIntervalo(),
+                        "diasCount", saved.getHours().size()));
+        return HoursResponse.from(saved);
     }
 
     @Transactional(readOnly = true)
@@ -177,13 +193,17 @@ public class SettingsService {
         if (request.getStatus() != null && !request.getStatus().isBlank()) {
             i.setStatus(request.getStatus());
         }
-        return InsuranceResponse.from(insuranceRepository.save(i));
+        Insurance saved = insuranceRepository.save(i);
+        auditLogService.log("Insurance", saved.getId(), AuditAction.CREATE,
+                AuditChanges.after(AuditChanges.snapshot(saved)));
+        return InsuranceResponse.from(saved);
     }
 
     @Transactional
     public InsuranceResponse updateInsurance(UUID id, InsuranceRequest request) {
         Insurance i = insuranceRepository.findById(id)
                 .orElseThrow(() -> new BusinessException("Convênio não encontrado."));
+        Map<String, Object> before = AuditChanges.snapshot(i);
         if (request.getName() != null && !request.getName().isBlank()) {
             i.setName(request.getName().trim());
         }
@@ -193,15 +213,20 @@ public class SettingsService {
         if (request.getStatus() != null && !request.getStatus().isBlank()) {
             i.setStatus(request.getStatus());
         }
-        return InsuranceResponse.from(insuranceRepository.save(i));
+        Insurance saved = insuranceRepository.save(i);
+        auditLogService.log("Insurance", saved.getId(), AuditAction.UPDATE,
+                AuditChanges.diff(before, AuditChanges.snapshot(saved)));
+        return InsuranceResponse.from(saved);
     }
 
     @Transactional
     public void deleteInsurance(UUID id) {
-        if (!insuranceRepository.existsById(id)) {
-            throw new BusinessException("Convênio não encontrado.");
-        }
+        Insurance existing = insuranceRepository.findById(id)
+                .orElseThrow(() -> new BusinessException("Convênio não encontrado."));
+        Map<String, Object> before = AuditChanges.snapshot(existing);
         insuranceRepository.deleteById(id);
+        auditLogService.log("Insurance", id, AuditAction.DELETE,
+                AuditChanges.before(before));
     }
 
     private Clinic getOrThrow() {

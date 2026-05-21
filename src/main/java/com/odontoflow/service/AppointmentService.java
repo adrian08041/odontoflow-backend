@@ -6,14 +6,17 @@ import com.odontoflow.dto.request.StatusUpdateRequest;
 import com.odontoflow.entity.Appointment;
 import com.odontoflow.entity.Dentist;
 import com.odontoflow.entity.Patient;
+import com.odontoflow.entity.enums.AuditAction;
 import com.odontoflow.exception.BusinessException;
 import com.odontoflow.repository.AppointmentRepository;
+import com.odontoflow.util.AuditChanges;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -23,6 +26,7 @@ public class AppointmentService {
     private final AppointmentRepository appointmentRepository;
     private final PatientService patientService;
     private final DentistService dentistService;
+    private final AuditLogService auditLogService;
 
     public List<Appointment> findAll(LocalDate startDate, LocalDate endDate, UUID dentistId) {
         return appointmentRepository.findAllFiltered(startDate, endDate, dentistId);
@@ -54,7 +58,10 @@ public class AppointmentService {
             appointment.setStatus(request.getStatus());
         }
 
-        return appointmentRepository.save(appointment);
+        Appointment saved = appointmentRepository.save(appointment);
+        auditLogService.log("Appointment", saved.getId(), AuditAction.CREATE,
+                AuditChanges.after(AuditChanges.snapshot(saved)));
+        return saved;
     }
 
     public Appointment update(UUID id, AppointmentRequest request) {
@@ -63,6 +70,8 @@ public class AppointmentService {
         Dentist dentist = dentistService.findById(request.getDentistId());
 
         validateDuration(request.getDuration());
+
+        Map<String, Object> before = AuditChanges.snapshot(existing);
 
         existing.setPatient(patient);
         existing.setPatientName(patient.getName());
@@ -78,26 +87,46 @@ public class AppointmentService {
             existing.setStatus(request.getStatus());
         }
 
-        return appointmentRepository.save(existing);
+        Appointment saved = appointmentRepository.save(existing);
+        auditLogService.log("Appointment", saved.getId(), AuditAction.UPDATE,
+                AuditChanges.diff(before, AuditChanges.snapshot(saved)));
+        return saved;
     }
 
     public Appointment reschedule(UUID id, RescheduleRequest request) {
         Appointment appointment = findById(id);
+        Map<String, Object> before = Map.of(
+                "date", appointment.getDate().toString(),
+                "time", appointment.getTime());
         appointment.setDate(request.getDate());
         appointment.setTime(request.getTime());
-        return appointmentRepository.save(appointment);
+        Appointment saved = appointmentRepository.save(appointment);
+        Map<String, Object> after = Map.of(
+                "date", saved.getDate().toString(),
+                "time", saved.getTime());
+        auditLogService.log("Appointment", saved.getId(), AuditAction.UPDATE,
+                AuditChanges.diff(before, after));
+        return saved;
     }
 
     public Appointment updateStatus(UUID id, StatusUpdateRequest request) {
         Appointment appointment = findById(id);
+        Map<String, Object> before = Map.of("status", String.valueOf(appointment.getStatus()));
         appointment.setStatus(request.getStatus());
-        return appointmentRepository.save(appointment);
+        Appointment saved = appointmentRepository.save(appointment);
+        Map<String, Object> after = Map.of("status", String.valueOf(saved.getStatus()));
+        auditLogService.log("Appointment", saved.getId(), AuditAction.UPDATE,
+                AuditChanges.diff(before, after));
+        return saved;
     }
 
     public void delete(UUID id) {
         Appointment appointment = findById(id);
+        Map<String, Object> before = AuditChanges.snapshot(appointment);
         appointment.setDeletedAt(LocalDateTime.now());
         appointmentRepository.save(appointment);
+        auditLogService.log("Appointment", appointment.getId(), AuditAction.DELETE,
+                AuditChanges.before(before));
     }
 
     private void validateDuration(Integer duration) {
