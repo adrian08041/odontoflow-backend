@@ -72,4 +72,7 @@ public class Appointment {
     private LocalDateTime createdAt;
 
     private LocalDateTime deletedAt;
+
+    @Column(name = "reminder_sent_at")
+    private LocalDateTime reminderSentAt;
 }

@@ -6,6 +6,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import com.odontoflow.dto.response.PageResponse;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
@@ -28,13 +29,15 @@ public class PatientController {
     @GetMapping
     @Operation(summary = "Listar pacientes", description = "Retorna pacientes ativos com paginação, busca e filtros")
     @ApiResponse(responseCode = "200", description = "Lista paginada de pacientes")
-    public ResponseEntity<Page<Patient>> findAll(
+    public ResponseEntity<PageResponse<Patient>> findAll(
             @RequestParam(required = false) String search,
             @RequestParam(required = false) String insurance,
             @RequestParam(required = false) String status,
             @PageableDefault(size = 20, sort = "name") Pageable pageable
     ) {
-        return ResponseEntity.ok(patientService.findAllActive(search, insurance, status, pageable));
+        return ResponseEntity.ok(
+                PageResponse.from(patientService.findAllActive(search, insurance, status, pageable))
+        );
     }
 
     @GetMapping("/insurances")

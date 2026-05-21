@@ -21,6 +21,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final WhatsAppApiKeyFilter whatsAppApiKeyFilter;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception{
@@ -31,9 +32,12 @@ public class SecurityConfig {
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/auth/**", "/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html").permitAll()
+                        .requestMatchers("/auth/**", "/swagger-ui/**", "/v3/api-docs/**",
+                                         "/swagger-ui.html", "/webhook/whatsapp/**").permitAll()
                 .anyRequest().authenticated()
                 )
+        .addFilterBefore(whatsAppApiKeyFilter,
+                UsernamePasswordAuthenticationFilter.class)
         .addFilterBefore(jwtAuthenticationFilter,
                 UsernamePasswordAuthenticationFilter.class);
 
