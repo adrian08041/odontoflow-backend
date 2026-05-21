@@ -4,6 +4,7 @@ import com.odontoflow.dto.request.FinanceStatusUpdateRequest;
 import com.odontoflow.dto.request.NewTransactionRequest;
 import com.odontoflow.dto.response.FinanceReceivableResponse;
 import com.odontoflow.dto.response.FinanceStatsResponse;
+import com.odontoflow.dto.response.PageResponse;
 import com.odontoflow.dto.response.PaymentMethodResponse;
 import com.odontoflow.dto.response.RevenueHistoryResponse;
 import com.odontoflow.entity.enums.FinanceStatus;
@@ -44,14 +45,14 @@ public class FinanceController {
     @GetMapping("/receivables")
     @Operation(summary = "Listar contas a receber", description = "Retorna paginado com filtros opcionais por status (Pendente, Pago, Atrasado) e tipo (receita, despesa)")
     @ApiResponse(responseCode = "200", description = "Lista paginada de contas a receber")
-    public ResponseEntity<Page<FinanceReceivableResponse>> findAll(
+    public ResponseEntity<PageResponse<FinanceReceivableResponse>> findAll(
             @RequestParam(required = false) FinanceStatus status,
             @RequestParam(required = false) TransactionType type,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size
     ) {
         Pageable pageable = PageRequest.of(page, size);
-        return ResponseEntity.ok(financeService.findAll(status, type, pageable));
+        return ResponseEntity.ok(PageResponse.from(financeService.findAll(status, type, pageable)));
     }
 
     @PostMapping("/transactions")

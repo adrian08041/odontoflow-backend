@@ -48,4 +48,15 @@ public interface AppointmentRepository extends JpaRepository<Appointment, UUID> 
            "a.type = com.odontoflow.entity.enums.AppointmentType.RETURN AND " +
            "a.date >= :today AND a.status = 'Pendente'")
     long countPendingReturnsFrom(@Param("today") LocalDate today);
+
+    @Query("SELECT a FROM Appointment a WHERE a.deletedAt IS NULL " +
+           "AND a.reminderSentAt IS NULL " +
+           "AND a.status = 'Pendente' " +
+           "AND a.patient.phone IS NOT NULL " +
+           "AND a.date BETWEEN :startDate AND :endDate " +
+           "ORDER BY a.date ASC, a.time ASC")
+    List<Appointment> findPendingReminders(
+            @Param("startDate") LocalDate startDate,
+            @Param("endDate") LocalDate endDate
+    );
 }

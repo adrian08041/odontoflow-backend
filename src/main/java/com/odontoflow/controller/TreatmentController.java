@@ -2,6 +2,7 @@ package com.odontoflow.controller;
 
 import com.odontoflow.dto.request.ProcedureStatusRequest;
 import com.odontoflow.dto.request.TreatmentPlanRequest;
+import com.odontoflow.dto.response.PageResponse;
 import com.odontoflow.dto.response.TreatmentPlanResponse;
 import com.odontoflow.service.TreatmentService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -39,13 +40,13 @@ public class TreatmentController {
     @GetMapping
     @Operation(summary = "Listar planos", description = "Paginado, busca opcional por título ou nome do paciente")
     @ApiResponse(responseCode = "200", description = "Lista paginada de planos")
-    public ResponseEntity<Page<TreatmentPlanResponse>> findAll(
+    public ResponseEntity<PageResponse<TreatmentPlanResponse>> findAll(
             @RequestParam(required = false) String search,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size
     ) {
         Pageable pageable = PageRequest.of(page, size);
-        return ResponseEntity.ok(treatmentService.findAll(search, pageable));
+        return ResponseEntity.ok(PageResponse.from(treatmentService.findAll(search, pageable)));
     }
 
     @GetMapping("/{id}")

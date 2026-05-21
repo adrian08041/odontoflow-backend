@@ -2,6 +2,7 @@ package com.odontoflow.controller;
 
 import com.odontoflow.dto.response.AuditLogDetailResponse;
 import com.odontoflow.dto.response.AuditLogResponse;
+import com.odontoflow.dto.response.PageResponse;
 import com.odontoflow.entity.enums.AuditAction;
 import com.odontoflow.service.AuditLogService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -37,7 +38,7 @@ public class AuditLogController {
             description = "Lista paginada com filtros opcionais. Ordenado por timestamp DESC.")
     @ApiResponse(responseCode = "200", description = "Lista paginada de logs")
     @ApiResponse(responseCode = "403", description = "Acesso negado (somente ADMIN)")
-    public ResponseEntity<Page<AuditLogResponse>> findAll(
+    public ResponseEntity<PageResponse<AuditLogResponse>> findAll(
             @RequestParam(required = false) String entity,
             @RequestParam(required = false) UUID entityId,
             @RequestParam(required = false) UUID userId,
@@ -46,9 +47,9 @@ public class AuditLogController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endDate,
             @PageableDefault(size = 50) Pageable pageable
     ) {
-        return ResponseEntity.ok(
+        return ResponseEntity.ok(PageResponse.from(
                 auditLogService.findAll(entity, entityId, userId, action, startDate, endDate, pageable)
-        );
+        ));
     }
 
     @GetMapping("/{id}")

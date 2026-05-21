@@ -24,6 +24,7 @@ public class PatientService {
         if (patientRepository.findByCpf(patient.getCpf()).isPresent()) {
             throw new BusinessException("Já existe um paciente cadastrado com este CPF.");
         }
+        patient.setPhone(normalizePhone(patient.getPhone()));
         Patient saved = patientRepository.save(patient);
         auditLogService.log("Patient", saved.getId(), AuditAction.CREATE,
                 AuditChanges.after(AuditChanges.snapshot(saved)));
@@ -75,7 +76,7 @@ public class PatientService {
 
         existing.setName(updatedData.getName());
         existing.setCpf(updatedData.getCpf());
-        existing.setPhone(updatedData.getPhone());
+        existing.setPhone(normalizePhone(updatedData.getPhone()));
         existing.setEmail(updatedData.getEmail());
         existing.setInsurance(updatedData.getInsurance());
         existing.setStatus(updatedData.getStatus());
@@ -89,5 +90,27 @@ public class PatientService {
         auditLogService.log("Patient", saved.getId(), AuditAction.UPDATE,
                 AuditChanges.diff(before, AuditChanges.snapshot(saved)));
         return saved;
+    }
+
+    /**
+     * Normaliza telefone para o formato esperado pelo uazapi (E.164 sem '+').
+     * Heurística conservadora — só prefixa DDI 55 quando o número parece BR.
+     * Números estrangeiros já formatados são preservados sem corrupção.
+     */
+    private String normalizePhone(String raw) {
+        if (raw == null) return null;
+        String digits = raw.replaceAll("\\D", "");
+        if (digits.isEmpty()) return null;
+
+        // Já tem DDI 55 + 10 ou 11 dígitos locais (12 ou 13 total) → BR completo
+        if (digits.startsWith("55") && (digits.length() == 12 || digits.length() == 13)) {
+            return digits;
+        }
+        // 10 ou 11 dígitos sem DDI → assume BR e prefixa
+        if (digits.length() == 10 || digits.length() == 11) {
+            return "55" + digits;
+        }
+        // Outros formatos (internacional, malformado) → mantém como veio
+        return digits;
     }
 }
