@@ -8,10 +8,12 @@ import com.odontoflow.dto.response.PaymentMethodResponse;
 import com.odontoflow.dto.response.RevenueHistoryResponse;
 import com.odontoflow.entity.FinanceReceivable;
 import com.odontoflow.entity.Patient;
+import com.odontoflow.entity.enums.AuditAction;
 import com.odontoflow.entity.enums.FinanceStatus;
 import com.odontoflow.entity.enums.TransactionType;
 import com.odontoflow.exception.BusinessException;
 import com.odontoflow.repository.FinanceReceivableRepository;
+import com.odontoflow.util.AuditChanges;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -51,6 +53,7 @@ public class FinanceService {
 
     private final FinanceReceivableRepository repository;
     private final PatientService patientService;
+    private final AuditLogService auditLogService;
 
     @Transactional(readOnly = true)
     public Page<FinanceReceivableResponse> findAll(FinanceStatus status, TransactionType type, Pageable pageable) {
@@ -94,7 +97,10 @@ public class FinanceService {
             receivable.setPaidAt(LocalDate.now());
         }
 
-        return FinanceReceivableResponse.from(repository.save(receivable));
+        FinanceReceivable saved = repository.save(receivable);
+        auditLogService.log("FinanceReceivable", saved.getId(), AuditAction.CREATE,
+                AuditChanges.after(AuditChanges.snapshot(saved)));
+        return FinanceReceivableResponse.from(saved);
     }
 
     private void bindPayer(FinanceReceivable receivable, NewTransactionRequest request) {
@@ -121,6 +127,10 @@ public class FinanceService {
             throw new BusinessException("O status é obrigatório.");
         }
         FinanceReceivable receivable = findById(id);
+        Map<String, Object> before = Map.of(
+                "status", String.valueOf(receivable.getStatus()),
+                "paidAt", receivable.getPaidAt() != null ? receivable.getPaidAt().toString() : "null"
+        );
         FinanceStatus target = request.getStatus();
         receivable.setStatus(target);
         if (target == FinanceStatus.Pago) {
@@ -130,14 +140,24 @@ public class FinanceService {
         } else {
             receivable.setPaidAt(null);
         }
-        return FinanceReceivableResponse.from(repository.save(receivable));
+        FinanceReceivable saved = repository.save(receivable);
+        Map<String, Object> after = Map.of(
+                "status", String.valueOf(saved.getStatus()),
+                "paidAt", saved.getPaidAt() != null ? saved.getPaidAt().toString() : "null"
+        );
+        auditLogService.log("FinanceReceivable", saved.getId(), AuditAction.UPDATE,
+                AuditChanges.diff(before, after));
+        return FinanceReceivableResponse.from(saved);
     }
 
     @Transactional
     public void delete(UUID id) {
         FinanceReceivable receivable = findById(id);
+        Map<String, Object> before = AuditChanges.snapshot(receivable);
         receivable.setDeletedAt(LocalDateTime.now());
         repository.save(receivable);
+        auditLogService.log("FinanceReceivable", receivable.getId(), AuditAction.DELETE,
+                AuditChanges.before(before));
     }
 
     @Transactional(readOnly = true)

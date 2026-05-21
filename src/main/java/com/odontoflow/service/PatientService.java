@@ -1,13 +1,16 @@
 package com.odontoflow.service;
 
 import com.odontoflow.entity.Patient;
+import com.odontoflow.entity.enums.AuditAction;
 import com.odontoflow.exception.BusinessException;
 import com.odontoflow.repository.PatientRepository;
+import com.odontoflow.util.AuditChanges;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -15,12 +18,16 @@ import java.util.UUID;
 public class PatientService {
 
     private final PatientRepository patientRepository;
+    private final AuditLogService auditLogService;
 
     public Patient save(Patient patient){
         if (patientRepository.findByCpf(patient.getCpf()).isPresent()) {
             throw new BusinessException("Já existe um paciente cadastrado com este CPF.");
         }
-        return patientRepository.save(patient);
+        Patient saved = patientRepository.save(patient);
+        auditLogService.log("Patient", saved.getId(), AuditAction.CREATE,
+                AuditChanges.after(AuditChanges.snapshot(saved)));
+        return saved;
     }
 
     public Page<Patient> findAllActive(String search, String insurance, String status, Pageable pageable) {
@@ -37,8 +44,11 @@ public class PatientService {
     public void delete (UUID id){
         Patient patient = patientRepository.findById(id)
                 .orElseThrow(() -> new BusinessException("Paciente não encontrado para exclusão."));
+        Map<String, Object> before = AuditChanges.snapshot(patient);
         patient.setDeletedAt(java.time.LocalDateTime.now());
         patientRepository.save(patient);
+        auditLogService.log("Patient", patient.getId(), AuditAction.DELETE,
+                AuditChanges.before(before));
     }
     public Patient findById(UUID id) {
         Patient patient = patientRepository.findById(id)
@@ -61,6 +71,8 @@ public class PatientService {
                     });
         }
 
+        Map<String, Object> before = AuditChanges.snapshot(existing);
+
         existing.setName(updatedData.getName());
         existing.setCpf(updatedData.getCpf());
         existing.setPhone(updatedData.getPhone());
@@ -73,6 +85,9 @@ public class PatientService {
         existing.setGender(updatedData.getGender());
         existing.setAddress(updatedData.getAddress());
 
-        return patientRepository.save(existing);
+        Patient saved = patientRepository.save(existing);
+        auditLogService.log("Patient", saved.getId(), AuditAction.UPDATE,
+                AuditChanges.diff(before, AuditChanges.snapshot(saved)));
+        return saved;
     }
 }

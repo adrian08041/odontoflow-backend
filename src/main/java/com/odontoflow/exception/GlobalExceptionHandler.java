@@ -1,6 +1,6 @@
 package com.odontoflow.exception;
 
-import com.fasterxml.jackson.databind.exc.InvalidFormatException;
+import com.fasterxml.jackson.databind.exc.MismatchedInputException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -50,13 +50,33 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<Map<String, Object>> handleUnreadable(HttpMessageNotReadableException ex) {
-        Throwable cause = ex.getMostSpecificCause();
-        if (cause instanceof InvalidFormatException ife && ife.getTargetType() != null && ife.getTargetType().isEnum()) {
-            String field = ife.getPath().isEmpty() ? "campo" : ife.getPath().get(ife.getPath().size() - 1).getFieldName();
-            Object[] accepted = ife.getTargetType().getEnumConstants();
+        MismatchedInputException mie = findCause(ex, MismatchedInputException.class);
+        if (mie != null && mie.getTargetType() != null && mie.getTargetType().isEnum()) {
+            String field = mie.getPath().isEmpty() ? "campo" : mie.getPath().get(mie.getPath().size() - 1).getFieldName();
+            Object[] accepted = mie.getTargetType().getEnumConstants();
             return badRequest("Valor inválido para '" + field + "'. Aceitos: " + java.util.Arrays.toString(accepted) + ".");
         }
+        Throwable root = ex.getMostSpecificCause();
+        if (root != null && root.getMessage() != null && root.getMessage().contains("not one of the values accepted for Enum class")) {
+            String msg = root.getMessage();
+            int start = msg.indexOf("Enum class:");
+            String tail = start >= 0 ? msg.substring(start + "Enum class:".length()) : "";
+            int end = tail.indexOf(']');
+            String accepted = end >= 0 ? tail.substring(0, end + 1).trim() : tail.trim();
+            return badRequest("Valor de enum inválido no body. Aceitos: " + accepted);
+        }
         return badRequest("Corpo da requisição inválido ou mal formatado.");
+    }
+
+    @SuppressWarnings("unchecked")
+    private <T extends Throwable> T findCause(Throwable ex, Class<T> type) {
+        Throwable t = ex;
+        while (t != null) {
+            if (type.isInstance(t)) return (T) t;
+            if (t.getCause() == t) return null;
+            t = t.getCause();
+        }
+        return null;
     }
 
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)

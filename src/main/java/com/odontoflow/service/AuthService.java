@@ -9,6 +9,7 @@ import com.odontoflow.dto.response.AuthResponse;
 import com.odontoflow.dto.response.MessageResponse;
 import com.odontoflow.entity.PasswordResetToken;
 import com.odontoflow.entity.User;
+import com.odontoflow.entity.enums.AuditAction;
 import com.odontoflow.entity.enums.UserRole;
 import com.odontoflow.exception.BusinessException;
 import com.odontoflow.repository.PasswordResetTokenRepository;
@@ -30,6 +31,7 @@ public class AuthService {
     private final JwtTokenProvider jwtTokenProvider;
     private final PasswordResetTokenRepository passwordResetTokenRepository;
     private final EmailService emailService;
+    private final AuditLogService auditLogService;
 
     public AuthResponse login(LoginRequest request) {
         User user = userRepository.findByEmail(request.getEmail())
@@ -42,6 +44,9 @@ public class AuthService {
         if (!user.getActive()) {
             throw new BusinessException("Usuário desativado");
         }
+
+        auditLogService.logAs(user.getId(), user.getName(), "User", user.getId(),
+                AuditAction.LOGIN, null);
 
         return buildAuthResponse(user);
     }
@@ -59,6 +64,11 @@ public class AuthService {
         user.setInitials(generateInitials(request.getName()));
 
         User savedUser = userRepository.save(user);
+
+        auditLogService.logAs(savedUser.getId(), savedUser.getName(), "User", savedUser.getId(),
+                AuditAction.CREATE, java.util.Map.of("name", savedUser.getName(),
+                        "email", savedUser.getEmail(),
+                        "role", savedUser.getRole().name()));
 
         return buildAuthResponse(savedUser);
     }
@@ -101,7 +111,7 @@ public class AuthService {
 
     private AuthResponse buildAuthResponse(User user) {
         String token = jwtTokenProvider.generateToken(
-                user.getId(), user.getEmail(), user.getRole().name());
+                user.getId(), user.getEmail(), user.getRole().name(), user.getName());
 
         return new AuthResponse(
                 token,

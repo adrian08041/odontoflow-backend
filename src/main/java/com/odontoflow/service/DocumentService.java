@@ -3,8 +3,10 @@ package com.odontoflow.service;
 import com.odontoflow.dto.response.DocumentResponse;
 import com.odontoflow.entity.Document;
 import com.odontoflow.entity.Patient;
+import com.odontoflow.entity.enums.AuditAction;
 import com.odontoflow.exception.BusinessException;
 import com.odontoflow.repository.DocumentRepository;
+import com.odontoflow.util.AuditChanges;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,6 +33,7 @@ public class DocumentService {
     private final DocumentRepository documentRepository;
     private final PatientService patientService;
     private final SupabaseStorageService storageService;
+    private final AuditLogService auditLogService;
 
     @Transactional(readOnly = true)
     public List<DocumentResponse> listByPatient(UUID patientId) {
@@ -62,7 +65,10 @@ public class DocumentService {
         doc.setFileUrl(publicUrl);
         doc.setContentType(file.getContentType());
         doc.setFileSizeBytes(file.getSize());
-        return DocumentResponse.from(documentRepository.save(doc));
+        Document saved = documentRepository.save(doc);
+        auditLogService.log("Document", saved.getId(), AuditAction.CREATE,
+                AuditChanges.after(AuditChanges.snapshot(saved)));
+        return DocumentResponse.from(saved);
     }
 
     @Transactional(readOnly = true)
@@ -78,8 +84,11 @@ public class DocumentService {
     @Transactional
     public void delete(UUID patientId, UUID docId) {
         Document doc = findById(patientId, docId);
+        var before = AuditChanges.snapshot(doc);
         storageService.delete(doc.getStoragePath());
         documentRepository.delete(doc);
+        auditLogService.log("Document", docId, AuditAction.DELETE,
+                AuditChanges.before(before));
     }
 
     private void validateFile(MultipartFile file) {
