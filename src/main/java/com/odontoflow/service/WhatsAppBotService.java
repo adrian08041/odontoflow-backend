@@ -56,12 +56,7 @@ public class WhatsAppBotService {
     /** Dossiê filtrado por LGPD (sem CPF/email/endereço/valores). */
     @Transactional(readOnly = true)
     public PatientContextResponse getPatientContext(String phone) {
-        String normalized = onlyDigits(phone);
-        Optional<Patient> opt = patientRepository.findAll().stream()
-                .filter(p -> p.getDeletedAt() == null
-                          && p.getPhone() != null
-                          && onlyDigits(p.getPhone()).equals(normalized))
-                .findFirst();
+        Optional<Patient> opt = resolvePatientByPhone(phone);
 
         Clinic clinic = clinicRepository.findFirstByOrderByCreatedAtAsc()
                 .orElseThrow(() -> new BusinessException("Clínica não inicializada"));
@@ -97,33 +92,80 @@ public class WhatsAppBotService {
         return new PatientContextResponse(
                 p.getId(), p.getName(), nextDto, overdue, treatment, clinicInfo);
     }
-    // NOTA: o lookup acima usa findAll().stream().filter — O(N) sobre pacientes ativos.
-    // Aceitável pra PI (centenas de pacientes). Em prod, adicionar query dedicada
-    // `findActiveByPhone(String)` no PatientRepository normalizando os dígitos.
+    /**
+     * Resolve paciente ativo pelo telefone, comparando só os dígitos (tolera máscara/formato
+     * e a normalização do uazapi). O(N) sobre pacientes ativos — aceitável pra PI; em prod,
+     * trocar por query dedicada `findActiveByPhone(String)` no PatientRepository.
+     */
+    private Optional<Patient> resolvePatientByPhone(String phone) {
+        String normalized = onlyDigits(phone);
+        if (normalized.isEmpty()) return Optional.empty();
+        return patientRepository.findAll().stream()
+                .filter(p -> p.getDeletedAt() == null
+                          && p.getPhone() != null
+                          && onlyDigits(p.getPhone()).equals(normalized))
+                .findFirst();
+    }
+
+    /**
+     * Resolve dentista ativo pelo nome (case-insensitive). Tolera o LLM mandar variações como
+     * "Dra. Ana Souza" / "Ana Souza" / "ana souza": tenta match exato normalizado, depois
+     * contains em qualquer direção.
+     */
+    private Optional<Dentist> resolveDentistByName(String name) {
+        if (name == null || name.isBlank()) return Optional.empty();
+        List<Dentist> dentists = dentistRepository.findAllActive();
+        String target = normalizeName(name);
+        Optional<Dentist> exact = dentists.stream()
+                .filter(d -> normalizeName(d.getName()).equals(target))
+                .findFirst();
+        if (exact.isPresent()) return exact;
+        return dentists.stream()
+                .filter(d -> {
+                    String n = normalizeName(d.getName());
+                    return n.contains(target) || target.contains(n);
+                })
+                .findFirst();
+    }
+
+    /** Lowercase, remove pontuação, título (dr/dra) e espaços extras — pra comparar nomes. */
+    private static String normalizeName(String s) {
+        return s.toLowerCase()
+                .replace(".", "")
+                .replaceAll("\\b(dra|dr|doutora|doutor)\\b", "")
+                .replaceAll("\\s+", " ")
+                .trim();
+    }
 
     @Transactional
     public Appointment createAppointment(BotAppointmentRequest req) {
+        if (req.date().isBefore(LocalDate.now())) {
+            throw new BusinessException("Não é possível agendar em data passada (" + req.date()
+                    + "). Use uma das datas retornadas por get_availability.");
+        }
+        // Resolve paciente por telefone e dentista por nome — o LLM alucina UUIDs opacos,
+        // mas o phone é injetado fixo pelo n8n e o nome do dentista vem do get_availability.
+        Patient patient = resolvePatientByPhone(req.phone())
+                .orElseThrow(() -> new BusinessException("Paciente não encontrado para este telefone"));
+        Dentist dentist = resolveDentistByName(req.dentistName())
+                .orElseThrow(() -> new BusinessException("Dentista não encontrado: " + req.dentistName()));
+
         // Idempotência: se o MESMO paciente já tem consulta ativa neste slot, devolve ela.
         // Cobre o double tool-call do AI Agent (n8n) — sem isso, a 2ª chamada recebia 400
         // "Slot já ocupado" apesar de a 1ª ter criado, e o bot reportava erro de uma operação
         // bem-sucedida. Slot ocupado por OUTRO paciente continua caindo no 400 abaixo.
         Optional<Appointment> duplicate = appointmentRepository
-                .findActiveByDateAndDentist(req.date(), req.dentistId()).stream()
+                .findActiveByDateAndDentist(req.date(), dentist.getId()).stream()
                 .filter(a -> req.time().equals(a.getTime()))
                 .filter(a -> !"Cancelado".equals(a.getStatus()))
-                .filter(a -> a.getPatient() != null && req.patientId().equals(a.getPatient().getId()))
+                .filter(a -> a.getPatient() != null && patient.getId().equals(a.getPatient().getId()))
                 .findFirst();
         if (duplicate.isPresent()) {
             return duplicate.get();
         }
-        if (!availabilityService.isSlotFree(req.dentistId(), req.date(), req.time())) {
+        if (!availabilityService.isSlotFree(dentist.getId(), req.date(), req.time())) {
             throw new BusinessException("Slot já ocupado");
         }
-        Patient patient = patientRepository.findById(req.patientId())
-                .filter(p -> p.getDeletedAt() == null)
-                .orElseThrow(() -> new BusinessException("Paciente não encontrado"));
-        Dentist dentist = dentistRepository.findActiveById(req.dentistId())
-                .orElseThrow(() -> new BusinessException("Dentista não encontrado"));
 
         Clinic clinic = clinicRepository.findFirstByOrderByCreatedAtAsc()
                 .orElseThrow(() -> new BusinessException("Clínica não inicializada"));
