@@ -6,6 +6,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 
 import java.time.LocalDate;
+import java.util.regex.Matcher;
 
 /**
  * Request do bot WhatsApp para criar consulta.
@@ -24,14 +25,29 @@ public record BotAppointmentRequest(
         String notes
 ) {
     public BotAppointmentRequest {
-        // O LLM às vezes manda a hora sem o zero à esquerda ("8:00" em vez de "08:00"),
-        // sobretudo quando o paciente fala "8 horas". Como o compact constructor roda na
-        // desserialização (antes do @Valid), normalizamos aqui e a validação @Pattern passa.
-        if (time != null) {
-            time = time.trim();
-            if (time.matches("\\d:[0-5]\\d")) {
-                time = "0" + time;
+        time = normalizeTime(time);
+    }
+
+    /**
+     * Normaliza o horário pro formato HH:mm exigido pelo @Pattern. O AI Agent (LLM) manda o time
+     * de formas variadas quando o paciente fala coloquial ("8 horas", "8h", "8 e 45"):
+     * "8" -> "08:00", "8h" -> "08:00", "8:0"/"8:45" -> "08:45", "8h30" -> "08:30", "08:00h" -> "08:00".
+     * Roda no compact constructor (antes do @Valid), então a validação passa. Valores
+     * irreconhecíveis seguem crus pro @Pattern rejeitar com mensagem clara.
+     */
+    private static String normalizeTime(String raw) {
+        if (raw == null) {
+            return null;
+        }
+        String t = raw.trim();
+        Matcher m = java.util.regex.Pattern.compile("^(\\d{1,2})\\s*[:hH]?\\s*(\\d{1,2})?").matcher(t);
+        if (m.find()) {
+            int h = Integer.parseInt(m.group(1));
+            int min = m.group(2) != null ? Integer.parseInt(m.group(2)) : 0;
+            if (h <= 23 && min <= 59) {
+                return String.format("%02d:%02d", h, min);
             }
         }
+        return t;
     }
 }

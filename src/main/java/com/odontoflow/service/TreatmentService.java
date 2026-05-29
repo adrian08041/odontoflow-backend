@@ -35,8 +35,8 @@ public class TreatmentService {
     private final AuditLogService auditLogService;
 
     @Transactional(readOnly = true)
-    public Page<TreatmentPlanResponse> findAll(String search, Pageable pageable) {
-        return repository.findAllFiltered(search, pageable).map(TreatmentPlanResponse::from);
+    public Page<TreatmentPlanResponse> findAll(String search, UUID patientId, Pageable pageable) {
+        return repository.findAllFiltered(search, patientId, pageable).map(TreatmentPlanResponse::from);
     }
 
     @Transactional(readOnly = true)

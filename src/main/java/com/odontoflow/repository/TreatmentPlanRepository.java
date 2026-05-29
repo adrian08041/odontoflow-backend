@@ -16,9 +16,14 @@ public interface TreatmentPlanRepository extends JpaRepository<TreatmentPlan, UU
     @Query("SELECT p FROM TreatmentPlan p WHERE p.deletedAt IS NULL AND " +
            "(:search IS NULL OR :search = '' OR " +
            " LOWER(p.title) LIKE LOWER(CONCAT('%', :search, '%')) OR " +
-           " LOWER(p.patientName) LIKE LOWER(CONCAT('%', :search, '%'))) " +
+           " LOWER(p.patientName) LIKE LOWER(CONCAT('%', :search, '%'))) AND " +
+           "(:patientId IS NULL OR p.patient.id = :patientId) " +
            "ORDER BY p.createdAt DESC, p.id DESC")
-    Page<TreatmentPlan> findAllFiltered(@Param("search") String search, Pageable pageable);
+    Page<TreatmentPlan> findAllFiltered(
+            @Param("search") String search,
+            @Param("patientId") UUID patientId,
+            Pageable pageable
+    );
 
     @Query("SELECT p FROM TreatmentPlan p WHERE p.id = :id AND p.deletedAt IS NULL")
     Optional<TreatmentPlan> findActiveById(@Param("id") UUID id);

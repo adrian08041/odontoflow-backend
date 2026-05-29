@@ -42,11 +42,12 @@ public class TreatmentController {
     @ApiResponse(responseCode = "200", description = "Lista paginada de planos")
     public ResponseEntity<PageResponse<TreatmentPlanResponse>> findAll(
             @RequestParam(required = false) String search,
+            @RequestParam(required = false) UUID patientId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size
     ) {
         Pageable pageable = PageRequest.of(page, size);
-        return ResponseEntity.ok(PageResponse.from(treatmentService.findAll(search, pageable)));
+        return ResponseEntity.ok(PageResponse.from(treatmentService.findAll(search, patientId, pageable)));
     }
 
     @GetMapping("/{id}")
