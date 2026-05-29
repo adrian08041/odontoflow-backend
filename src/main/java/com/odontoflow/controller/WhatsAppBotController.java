@@ -1,6 +1,7 @@
 package com.odontoflow.controller;
 
 import com.odontoflow.dto.request.BotAppointmentRequest;
+import com.odontoflow.dto.request.BotRegisterPatientRequest;
 import com.odontoflow.dto.request.BotRescheduleRequest;
 import com.odontoflow.dto.request.ConversationMessageRequest;
 import com.odontoflow.dto.request.HandoffRequest;
@@ -16,6 +17,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -38,6 +40,12 @@ public class WhatsAppBotController {
     @GetMapping("/patient-context")
     public ResponseEntity<PatientContextResponse> patientContext(@RequestParam String phone) {
         return ResponseEntity.ok(botService.getPatientContext(phone));
+    }
+
+    @PostMapping("/patients")
+    public ResponseEntity<Map<String, Object>> registerPatient(
+            @Valid @RequestBody BotRegisterPatientRequest req) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(botService.registerPatient(req));
     }
 
     @GetMapping("/availability")

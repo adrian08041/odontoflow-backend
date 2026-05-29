@@ -16,6 +16,15 @@ public interface PatientRepository extends JpaRepository<Patient, UUID> {
 
     Optional<Patient> findByCpf(String cpf);
 
+    /**
+     * Pacientes cujo CPF — comparado só por dígitos — bate com :digits. Robusto a máscara
+     * (000.000.000-00) vs dígitos puros. NÃO filtra deletedAt: um CPF de paciente soft-deleted
+     * também conta como duplicado pro autocadastro do bot (→ handoff). Retorna List porque o banco
+     * pode ter o mesmo CPF em formatos diferentes (seed vs front) — evita NonUniqueResultException.
+     */
+    @Query("SELECT p FROM Patient p WHERE REPLACE(REPLACE(p.cpf, '.', ''), '-', '') = :digits")
+    java.util.List<Patient> findByCpfDigits(@Param("digits") String digits);
+
     @Query("SELECT p FROM Patient p WHERE p.deletedAt IS NULL")
     Page<Patient> findAllActive(Pageable pageable);
 

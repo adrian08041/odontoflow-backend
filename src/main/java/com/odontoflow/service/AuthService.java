@@ -3,14 +3,12 @@ package com.odontoflow.service;
 import com.odontoflow.config.JwtTokenProvider;
 import com.odontoflow.dto.request.ForgotPasswordRequest;
 import com.odontoflow.dto.request.LoginRequest;
-import com.odontoflow.dto.request.RegisterRequest;
 import com.odontoflow.dto.request.ResetPasswordRequest;
 import com.odontoflow.dto.response.AuthResponse;
 import com.odontoflow.dto.response.MessageResponse;
 import com.odontoflow.entity.PasswordResetToken;
 import com.odontoflow.entity.User;
 import com.odontoflow.entity.enums.AuditAction;
-import com.odontoflow.entity.enums.UserRole;
 import com.odontoflow.exception.BusinessException;
 import com.odontoflow.repository.PasswordResetTokenRepository;
 import com.odontoflow.repository.UserRepository;
@@ -49,28 +47,6 @@ public class AuthService {
                 AuditAction.LOGIN, null);
 
         return buildAuthResponse(user);
-    }
-
-    public AuthResponse register(RegisterRequest request) {
-        if (userRepository.findByEmail(request.getEmail()).isPresent()) {
-            throw new BusinessException("E-mail já cadastrado");
-        }
-
-        User user = new User();
-        user.setName(request.getName());
-        user.setEmail(request.getEmail());
-        user.setPassword(passwordEncoder.encode(request.getPassword()));
-        user.setRole(UserRole.RECEPCIONISTA);
-        user.setInitials(generateInitials(request.getName()));
-
-        User savedUser = userRepository.save(user);
-
-        auditLogService.logAs(savedUser.getId(), savedUser.getName(), "User", savedUser.getId(),
-                AuditAction.CREATE, java.util.Map.of("name", savedUser.getName(),
-                        "email", savedUser.getEmail(),
-                        "role", savedUser.getRole().name()));
-
-        return buildAuthResponse(savedUser);
     }
 
     @Transactional
@@ -122,13 +98,5 @@ public class AuthService {
                 user.getInitials(),
                 user.getAvatarUrl()
         );
-    }
-
-    private String generateInitials(String name) {
-        String[] parts = name.trim().split("\\s+");
-        if (parts.length >= 2) {
-            return (parts[0].charAt(0) + "" + parts[parts.length - 1].charAt(0)).toUpperCase();
-        }
-        return parts[0].substring(0, Math.min(2, parts[0].length())).toUpperCase();
     }
 }

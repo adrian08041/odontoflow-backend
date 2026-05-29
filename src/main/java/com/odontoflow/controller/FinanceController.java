@@ -36,7 +36,7 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/finance")
 @RequiredArgsConstructor
-@PreAuthorize("hasAnyRole('ADMIN', 'RECEPCIONISTA')")
+@PreAuthorize("hasRole('ADMIN')")
 @Tag(name = "Financeiro", description = "Contas a receber, transações e métricas financeiras")
 public class FinanceController {
 

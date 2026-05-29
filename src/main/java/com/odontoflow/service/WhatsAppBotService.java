@@ -1,6 +1,7 @@
 package com.odontoflow.service;
 
 import com.odontoflow.dto.request.BotAppointmentRequest;
+import com.odontoflow.dto.request.BotRegisterPatientRequest;
 import com.odontoflow.dto.request.BotRescheduleRequest;
 import com.odontoflow.dto.request.HandoffRequest;
 import com.odontoflow.dto.response.HandoffResponse;
@@ -19,10 +20,14 @@ import com.odontoflow.repository.DentistRepository;
 import com.odontoflow.repository.FinanceReceivableRepository;
 import com.odontoflow.repository.PatientRepository;
 import com.odontoflow.repository.TreatmentPlanRepository;
+import com.odontoflow.util.CpfUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
 import java.time.MonthDay;
@@ -48,9 +53,42 @@ public class WhatsAppBotService {
     private final AvailabilityService availabilityService;
     private final WhatsAppReminderService reminderService;
     private final AuditLogService auditLogService;
+    private final PatientService patientService;
 
     @Value("${app.frontend-url:https://odontoflow.up.railway.app}")
     private String landingUrl;
+
+    /**
+     * Cadastra um lead novo a partir do WhatsApp (nome + CPF; phone vem do contexto).
+     * CPF inválido → 400; CPF já existente → 409 (bot faz handoff). Reusa PatientService.save
+     * (normaliza telefone + audita CREATE).
+     */
+    @Transactional
+    public Map<String, Object> registerPatient(BotRegisterPatientRequest req) {
+        String digits = CpfUtil.normalize(req.cpf());
+        if (!CpfUtil.isValid(digits)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "CPF inválido");
+        }
+        // Pre-check load-bearing: roda ANTES do save (que lançaria BusinessException→400).
+        // Compara por dígitos e inclui soft-deleted → qualquer CPF já existente vira 409 (handoff).
+        if (!patientRepository.findByCpfDigits(digits).isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "CPF já cadastrado");
+        }
+
+        Patient patient = new Patient();
+        patient.setName(req.name().trim());
+        patient.setCpf(CpfUtil.format(digits));   // grava no formato canônico (com máscara)
+        patient.setPhone(req.phone());
+        patient.setStatus("Ativo");
+
+        try {
+            Patient saved = patientService.save(patient);
+            return Map.of("patientId", saved.getId(), "name", saved.getName());
+        } catch (DataIntegrityViolationException e) {
+            // Rede de segurança p/ corrida concorrente (unique constraint do CPF) → 409, não 500.
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "CPF já cadastrado");
+        }
+    }
 
     @Value("${app.whatsapp.admin-number:" + ADMIN_WHATSAPP_FALLBACK + "}")
     private String adminPhone;
