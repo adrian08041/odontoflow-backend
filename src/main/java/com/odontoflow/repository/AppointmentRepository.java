@@ -19,12 +19,14 @@ public interface AppointmentRepository extends JpaRepository<Appointment, UUID> 
     @Query("SELECT a FROM Appointment a WHERE a.deletedAt IS NULL AND " +
            "(CAST(:startDate AS date) IS NULL OR a.date >= :startDate) AND " +
            "(CAST(:endDate AS date) IS NULL OR a.date <= :endDate) AND " +
-           "(:dentistId IS NULL OR a.dentist.id = :dentistId) " +
+           "(:dentistId IS NULL OR a.dentist.id = :dentistId) AND " +
+           "(:patientId IS NULL OR a.patient.id = :patientId) " +
            "ORDER BY a.date ASC, a.time ASC")
     List<Appointment> findAllFiltered(
             @Param("startDate") LocalDate startDate,
             @Param("endDate") LocalDate endDate,
-            @Param("dentistId") UUID dentistId
+            @Param("dentistId") UUID dentistId,
+            @Param("patientId") UUID patientId
     );
 
     // Queries dedicadas do bot WhatsApp (Fase 2) — sem o padrão ':param IS NULL',

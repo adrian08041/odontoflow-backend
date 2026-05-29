@@ -83,6 +83,7 @@ public class SettingsController {
     // ---------- Convênios ----------
 
     @GetMapping("/insurances")
+    @PreAuthorize("hasAnyRole('ADMIN', 'RECEPCIONISTA')")
     @Operation(summary = "Listar convênios", description = "Convênios cadastrados, ordenados por nome")
     @ApiResponse(responseCode = "200", description = "Lista de convênios")
     public ResponseEntity<List<InsuranceResponse>> listInsurances() {
@@ -90,6 +91,7 @@ public class SettingsController {
     }
 
     @PostMapping("/insurances")
+    @PreAuthorize("hasAnyRole('ADMIN', 'RECEPCIONISTA')")
     @Operation(summary = "Adicionar convênio", description = "Cria um novo convênio. Status default = Ativo")
     @ApiResponse(responseCode = "201", description = "Convênio criado")
     @ApiResponse(responseCode = "400", description = "Nome obrigatório")
@@ -99,6 +101,7 @@ public class SettingsController {
     }
 
     @PutMapping("/insurances/{id}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'RECEPCIONISTA')")
     @Operation(summary = "Atualizar convênio", description = "Atualização parcial — só altera campos não nulos")
     @ApiResponse(responseCode = "200", description = "Convênio atualizado")
     @ApiResponse(responseCode = "400", description = "Convênio não encontrado")
@@ -110,6 +113,7 @@ public class SettingsController {
     }
 
     @DeleteMapping("/insurances/{id}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'RECEPCIONISTA')")
     @Operation(summary = "Remover convênio", description = "Deleção física (catálogo, sem soft delete)")
     @ApiResponse(responseCode = "204", description = "Convênio removido")
     @ApiResponse(responseCode = "400", description = "Convênio não encontrado")

@@ -56,8 +56,8 @@ public class FinanceService {
     private final AuditLogService auditLogService;
 
     @Transactional(readOnly = true)
-    public Page<FinanceReceivableResponse> findAll(FinanceStatus status, TransactionType type, Pageable pageable) {
-        return repository.findAllFiltered(status, type, pageable).map(FinanceReceivableResponse::from);
+    public Page<FinanceReceivableResponse> findAll(FinanceStatus status, TransactionType type, UUID patientId, Pageable pageable) {
+        return repository.findAllFiltered(status, type, patientId, pageable).map(FinanceReceivableResponse::from);
     }
 
     public FinanceReceivable findById(UUID id) {

@@ -19,11 +19,13 @@ public interface FinanceReceivableRepository extends JpaRepository<FinanceReceiv
 
     @Query("SELECT r FROM FinanceReceivable r WHERE r.deletedAt IS NULL AND " +
            "(:status IS NULL OR r.status = :status) AND " +
-           "(:type IS NULL OR r.type = :type) " +
+           "(:type IS NULL OR r.type = :type) AND " +
+           "(:patientId IS NULL OR r.patient.id = :patientId) " +
            "ORDER BY r.due DESC")
     Page<FinanceReceivable> findAllFiltered(
             @Param("status") FinanceStatus status,
             @Param("type") TransactionType type,
+            @Param("patientId") UUID patientId,
             Pageable pageable
     );
 

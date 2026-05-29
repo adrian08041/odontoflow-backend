@@ -24,6 +24,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.MonthDay;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -139,10 +140,6 @@ public class WhatsAppBotService {
 
     @Transactional
     public Appointment createAppointment(BotAppointmentRequest req) {
-        if (req.date().isBefore(LocalDate.now())) {
-            throw new BusinessException("Não é possível agendar em data passada (" + req.date()
-                    + "). Use uma das datas retornadas por get_availability.");
-        }
         // Resolve paciente por telefone e dentista por nome — o LLM alucina UUIDs opacos,
         // mas o phone é injetado fixo pelo n8n e o nome do dentista vem do get_availability.
         Patient patient = resolvePatientByPhone(req.phone())
@@ -150,12 +147,18 @@ public class WhatsAppBotService {
         Dentist dentist = resolveDentistByName(req.dentistName())
                 .orElseThrow(() -> new BusinessException("Dentista não encontrado: " + req.dentistName()));
 
+        // O AI Agent (LLM) copia certo dentista/dia/mês/hora mas alucina o ANO (manda 2024).
+        // Não confiamos no ano informado: resolvemos a data real do slot a partir da
+        // disponibilidade do dentista (fonte de verdade), casando dia+mês+hora. Isso também
+        // garante que só marcamos em slot legítimo (dia de atendimento + dentro da grade + livre).
+        LocalDate date = resolveSlotDate(dentist.getId(), req.date(), req.time());
+
         // Idempotência: se o MESMO paciente já tem consulta ativa neste slot, devolve ela.
         // Cobre o double tool-call do AI Agent (n8n) — sem isso, a 2ª chamada recebia 400
         // "Slot já ocupado" apesar de a 1ª ter criado, e o bot reportava erro de uma operação
         // bem-sucedida. Slot ocupado por OUTRO paciente continua caindo no 400 abaixo.
         Optional<Appointment> duplicate = appointmentRepository
-                .findActiveByDateAndDentist(req.date(), dentist.getId()).stream()
+                .findActiveByDateAndDentist(date, dentist.getId()).stream()
                 .filter(a -> req.time().equals(a.getTime()))
                 .filter(a -> !"Cancelado".equals(a.getStatus()))
                 .filter(a -> a.getPatient() != null && patient.getId().equals(a.getPatient().getId()))
@@ -163,7 +166,7 @@ public class WhatsAppBotService {
         if (duplicate.isPresent()) {
             return duplicate.get();
         }
-        if (!availabilityService.isSlotFree(dentist.getId(), req.date(), req.time())) {
+        if (!availabilityService.isSlotFree(dentist.getId(), date, req.time())) {
             throw new BusinessException("Slot já ocupado");
         }
 
@@ -175,7 +178,7 @@ public class WhatsAppBotService {
         a.setPatient(patient);
         a.setPatientName(patient.getName());
         a.setDentist(dentist);
-        a.setDate(req.date());
+        a.setDate(date);
         a.setTime(req.time());
         a.setDuration(duration);
         a.setType(req.type());
@@ -189,13 +192,50 @@ public class WhatsAppBotService {
         changes.put("source", "Bot WhatsApp");
         changes.put("patientName", patient.getName());
         changes.put("dentistName", dentist.getName());
-        changes.put("date", req.date().toString());
+        changes.put("date", date.toString());
         changes.put("time", req.time());
         changes.put("type", req.type().name());
         auditLogService.logAs(null, SYSTEM_USER_NAME,
                 "Appointment", saved.getId(), AuditAction.CREATE, changes);
 
         return saved;
+    }
+
+    /** Janela máxima (dias) pra reconciliar o ano alucinado pelo LLM contra a disponibilidade real. */
+    private static final int SLOT_LOOKAHEAD_DAYS = 120;
+
+    /**
+     * Resolve a data REAL do slot. O AI Agent copia certo dia/mês/hora mas alucina o ANO
+     * (ex: manda 2024-06-13 para o slot real 2026-06-13). Em vez de confiar no ano informado,
+     * casamos (dia, mês, hora) contra a disponibilidade do dentista e usamos a data verdadeira —
+     * o ano passa a vir do backend, não do LLM. Também rejeita dia sem atendimento / fora da grade.
+     */
+    private LocalDate resolveSlotDate(UUID dentistId, LocalDate requested, String time) {
+        if (requested == null) {
+            throw new BusinessException("Data não informada.");
+        }
+        LocalDate today = LocalDate.now();
+        // Caminho feliz: a data informada já é futura e o slot é oferecido — usa direto.
+        if (!requested.isBefore(today) && isSlotOffered(dentistId, requested, time)) {
+            return requested;
+        }
+        // Ano provavelmente alucinado: procura o próximo dia futuro com mesmo dia/mês e slot livre.
+        MonthDay target = MonthDay.from(requested);
+        for (int i = 0; i <= SLOT_LOOKAHEAD_DAYS; i++) {
+            LocalDate candidate = today.plusDays(i);
+            if (MonthDay.from(candidate).equals(target) && isSlotOffered(dentistId, candidate, time)) {
+                return candidate;
+            }
+        }
+        throw new BusinessException("Esse horário (" + time + ") não está disponível. "
+                + "Use um dos horários retornados por get_availability.");
+    }
+
+    /** True se (date, time) é um slot REAL do dentista: dia de atendimento, dentro da grade e livre. */
+    private boolean isSlotOffered(UUID dentistId, LocalDate date, String time) {
+        return availabilityService.findAvailability(date, date, dentistId, null).stream()
+                .flatMap(r -> r.slots().stream())
+                .anyMatch(s -> time.equals(s.time()));
     }
 
     @Transactional

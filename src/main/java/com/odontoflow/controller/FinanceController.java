@@ -43,16 +43,17 @@ public class FinanceController {
     private final FinanceService financeService;
 
     @GetMapping("/receivables")
-    @Operation(summary = "Listar contas a receber", description = "Retorna paginado com filtros opcionais por status (Pendente, Pago, Atrasado) e tipo (receita, despesa)")
+    @Operation(summary = "Listar contas a receber", description = "Retorna paginado com filtros opcionais por status (Pendente, Pago, Atrasado), tipo (receita, despesa) e paciente")
     @ApiResponse(responseCode = "200", description = "Lista paginada de contas a receber")
     public ResponseEntity<PageResponse<FinanceReceivableResponse>> findAll(
             @RequestParam(required = false) FinanceStatus status,
             @RequestParam(required = false) TransactionType type,
+            @RequestParam(required = false) UUID patientId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size
     ) {
         Pageable pageable = PageRequest.of(page, size);
-        return ResponseEntity.ok(PageResponse.from(financeService.findAll(status, type, pageable)));
+        return ResponseEntity.ok(PageResponse.from(financeService.findAll(status, type, patientId, pageable)));
     }
 
     @PostMapping("/transactions")

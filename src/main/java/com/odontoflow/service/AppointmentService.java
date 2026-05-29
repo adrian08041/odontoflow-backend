@@ -28,8 +28,8 @@ public class AppointmentService {
     private final DentistService dentistService;
     private final AuditLogService auditLogService;
 
-    public List<Appointment> findAll(LocalDate startDate, LocalDate endDate, UUID dentistId) {
-        return appointmentRepository.findAllFiltered(startDate, endDate, dentistId);
+    public List<Appointment> findAll(LocalDate startDate, LocalDate endDate, UUID dentistId, UUID patientId) {
+        return appointmentRepository.findAllFiltered(startDate, endDate, dentistId, patientId);
     }
 
     public Appointment findById(UUID id) {
