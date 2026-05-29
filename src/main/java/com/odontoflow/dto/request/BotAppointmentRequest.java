@@ -22,4 +22,16 @@ public record BotAppointmentRequest(
         @NotNull AppointmentType type,
         String procedure,
         String notes
-) {}
+) {
+    public BotAppointmentRequest {
+        // O LLM às vezes manda a hora sem o zero à esquerda ("8:00" em vez de "08:00"),
+        // sobretudo quando o paciente fala "8 horas". Como o compact constructor roda na
+        // desserialização (antes do @Valid), normalizamos aqui e a validação @Pattern passa.
+        if (time != null) {
+            time = time.trim();
+            if (time.matches("\\d:[0-5]\\d")) {
+                time = "0" + time;
+            }
+        }
+    }
+}
