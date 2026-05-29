@@ -38,6 +38,7 @@ public class User {
 
     private String specialty;
     private String initials;
+    private String avatarUrl;
 
     @Column(nullable = false)
     private Boolean active = true;

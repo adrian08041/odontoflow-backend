@@ -115,6 +115,18 @@ public class AvailabilityService {
     }
 
     /**
+     * Igual ao {@link #isSlotFree}, mas ignora a consulta {@code excludeAppointmentId} — usado na
+     * remarcação, onde a própria consulta sendo movida não deve contar como ocupando o slot de destino.
+     */
+    @Transactional(readOnly = true)
+    public boolean isSlotFreeExcluding(UUID dentistId, LocalDate date, String time, UUID excludeAppointmentId) {
+        return appointmentRepository.findActiveByDateAndDentist(date, dentistId).stream()
+                .filter(a -> !"Cancelado".equals(a.getStatus()))
+                .filter(a -> excludeAppointmentId == null || !excludeAppointmentId.equals(a.getId()))
+                .noneMatch(a -> time.equals(a.getTime()));
+    }
+
+    /**
      * Reinterpreta uma data possivelmente no passado (LLM alucina o ano, ex 2024) para o ano
      * que a torna futura. Mantém dia/mês. Datas já futuras passam sem alteração.
      */

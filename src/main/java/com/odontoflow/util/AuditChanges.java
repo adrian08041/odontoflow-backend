@@ -9,6 +9,7 @@ import com.odontoflow.entity.Insurance;
 import com.odontoflow.entity.Patient;
 import com.odontoflow.entity.TreatmentPlan;
 import com.odontoflow.entity.TreatmentProcedure;
+import com.odontoflow.entity.User;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -132,6 +133,16 @@ public final class AuditChanges {
                 "type", i.getType(),
                 "discount", i.getDiscount(),
                 "status", i.getStatus()
+        );
+    }
+
+    public static Map<String, Object> snapshot(User u) {
+        return ofEntries(
+                "id", u.getId(),
+                "name", u.getName(),
+                "email", u.getEmail(),
+                "role", u.getRole() != null ? u.getRole().name() : null,
+                "avatarUrl", u.getAvatarUrl()
         );
     }
 

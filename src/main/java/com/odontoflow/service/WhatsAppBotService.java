@@ -1,6 +1,7 @@
 package com.odontoflow.service;
 
 import com.odontoflow.dto.request.BotAppointmentRequest;
+import com.odontoflow.dto.request.BotRescheduleRequest;
 import com.odontoflow.dto.request.HandoffRequest;
 import com.odontoflow.dto.response.HandoffResponse;
 import com.odontoflow.dto.response.PatientContextResponse;
@@ -147,25 +148,28 @@ public class WhatsAppBotService {
         Dentist dentist = resolveDentistByName(req.dentistName())
                 .orElseThrow(() -> new BusinessException("Dentista não encontrado: " + req.dentistName()));
 
+        // Idempotência ANTES de resolver a data: se o MESMO paciente já tem consulta ativa com este
+        // dentista no mesmo (dia/mês)+horário, devolve ela. Cobre o double tool-call do AI Agent (n8n) —
+        // PRECISA vir antes do resolveSlotDate, que (via findAvailability) veria a consulta da 1ª chamada
+        // como slot ocupado e lançaria "horário não disponível" na 2ª. Compara por MonthDay (o LLM alucina
+        // o ANO). Slot ocupado por OUTRO paciente continua caindo no isSlotFree abaixo.
+        Optional<Appointment> duplicate = appointmentRepository
+                .findUpcomingActiveByPatient(patient.getId(), LocalDate.now()).stream()
+                .filter(a -> a.getDentist() != null && dentist.getId().equals(a.getDentist().getId()))
+                .filter(a -> req.time().equals(a.getTime()))
+                .filter(a -> a.getDate() != null && req.date() != null
+                          && MonthDay.from(a.getDate()).equals(MonthDay.from(req.date())))
+                .findFirst();
+        if (duplicate.isPresent()) {
+            return duplicate.get();
+        }
+
         // O AI Agent (LLM) copia certo dentista/dia/mês/hora mas alucina o ANO (manda 2024).
         // Não confiamos no ano informado: resolvemos a data real do slot a partir da
         // disponibilidade do dentista (fonte de verdade), casando dia+mês+hora. Isso também
         // garante que só marcamos em slot legítimo (dia de atendimento + dentro da grade + livre).
         LocalDate date = resolveSlotDate(dentist.getId(), req.date(), req.time());
 
-        // Idempotência: se o MESMO paciente já tem consulta ativa neste slot, devolve ela.
-        // Cobre o double tool-call do AI Agent (n8n) — sem isso, a 2ª chamada recebia 400
-        // "Slot já ocupado" apesar de a 1ª ter criado, e o bot reportava erro de uma operação
-        // bem-sucedida. Slot ocupado por OUTRO paciente continua caindo no 400 abaixo.
-        Optional<Appointment> duplicate = appointmentRepository
-                .findActiveByDateAndDentist(date, dentist.getId()).stream()
-                .filter(a -> req.time().equals(a.getTime()))
-                .filter(a -> !"Cancelado".equals(a.getStatus()))
-                .filter(a -> a.getPatient() != null && patient.getId().equals(a.getPatient().getId()))
-                .findFirst();
-        if (duplicate.isPresent()) {
-            return duplicate.get();
-        }
         if (!availabilityService.isSlotFree(dentist.getId(), date, req.time())) {
             throw new BusinessException("Slot já ocupado");
         }
@@ -265,6 +269,74 @@ public class WhatsAppBotService {
     @Transactional
     public void requestRescheduleByPhone(String phone) {
         requestReschedule(resolveNextActiveByPhone(phone).getId());
+    }
+
+    /**
+     * Remarcação ativa: move a PRÓXIMA consulta ativa do paciente (resolvida por telefone) para um
+     * novo slot escolhido na conversa. Espelha o createAppointment, mas atualiza o MESMO registro
+     * (preserva appointmentId/type/procedure). Trocar de dentista é permitido. Status volta a
+     * "Pendente" e reminderSentAt é resetado para a consulta voltar ao ciclo de lembrete D-1.
+     */
+    @Transactional
+    public Appointment rescheduleNextByPhone(BotRescheduleRequest req) {
+        Appointment atual = resolveNextActiveByPhone(req.phone());
+        Dentist dentist = resolveDentistByName(req.dentistName())
+                .orElseThrow(() -> new BusinessException("Dentista não encontrado: " + req.dentistName()));
+
+        // No-op idempotente ANTES de resolver a data: cobre o double tool-call do AI Agent e a
+        // reconfirmação do mesmo slot. Precisa vir antes do resolveSlotDate porque este, via
+        // findAvailability, enxerga a PRÓPRIA consulta como slot ocupado e rejeitaria o slot atual
+        // ("horário não disponível"). Compara por MonthDay (ignora o ano alucinado pelo LLM) + hora + dentista.
+        if (isSameSlot(atual, dentist.getId(), req.date(), req.time())) {
+            return atual;
+        }
+
+        // O LLM alucina o ANO — resolvemos a data real do slot pela disponibilidade (fonte de verdade).
+        LocalDate date = resolveSlotDate(dentist.getId(), req.date(), req.time());
+
+        // Slot de destino livre, ignorando a própria consulta (que ainda ocupa o slot antigo).
+        if (!availabilityService.isSlotFreeExcluding(dentist.getId(), date, req.time(), atual.getId())) {
+            throw new BusinessException("Slot já ocupado");
+        }
+
+        String fromDentist = atual.getDentist() != null ? atual.getDentist().getName() : null;
+        LocalDate fromDate = atual.getDate();
+        String fromTime = atual.getTime();
+        String fromStatus = atual.getStatus();
+
+        atual.setDentist(dentist);
+        atual.setDate(date);
+        atual.setTime(req.time());
+        atual.setStatus("Pendente");
+        atual.setReminderSentAt(null); // volta ao ciclo de lembrete D-1 da nova data
+
+        Appointment saved = appointmentRepository.save(atual);
+
+        Map<String, Object> changes = new LinkedHashMap<>();
+        changes.put("source", "Bot WhatsApp");
+        changes.put("dentistName", fromDentist + " -> " + dentist.getName());
+        changes.put("date", fromDate + " -> " + date);
+        changes.put("time", fromTime + " -> " + req.time());
+        changes.put("status", fromStatus + " -> Pendente");
+        auditLogService.logAs(null, SYSTEM_USER_NAME,
+                "Appointment", saved.getId(), AuditAction.UPDATE, changes);
+
+        return saved;
+    }
+
+    /**
+     * True se a consulta {@code a} já está exatamente neste dentista + (dia/mês) + horário e não-Cancelada.
+     * Compara por {@link MonthDay} (ignora o ANO) porque o LLM alucina o ano da data no request — a data
+     * crua não é confiável e a data resolvida não pode ser usada aqui (resolveSlotDate rejeitaria o
+     * slot próprio como ocupado). Usado para detectar no-op/double-call antes de resolver a data.
+     */
+    private boolean isSameSlot(Appointment a, UUID dentistId, LocalDate requestedDate, String time) {
+        return a.getDentist() != null
+                && dentistId.equals(a.getDentist().getId())
+                && a.getTime() != null && time.equals(a.getTime())
+                && a.getDate() != null && requestedDate != null
+                && MonthDay.from(a.getDate()).equals(MonthDay.from(requestedDate))
+                && !"Cancelado".equals(a.getStatus());
     }
 
     private Appointment resolveNextActiveByPhone(String phone) {

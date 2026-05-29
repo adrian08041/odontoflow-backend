@@ -1,6 +1,7 @@
 package com.odontoflow.controller;
 
 import com.odontoflow.dto.request.BotAppointmentRequest;
+import com.odontoflow.dto.request.BotRescheduleRequest;
 import com.odontoflow.dto.request.ConversationMessageRequest;
 import com.odontoflow.dto.request.HandoffRequest;
 import com.odontoflow.dto.response.AvailabilitySlotResponse;
@@ -90,6 +91,24 @@ public class WhatsAppBotController {
     public ResponseEntity<Void> rescheduleByPhone(@RequestParam String phone) {
         botService.requestRescheduleByPhone(phone);
         return ResponseEntity.ok().build();
+    }
+
+    /**
+     * Remarcação ativa: muda dia/hora (e opcionalmente dentista) da próxima consulta do paciente.
+     * Diferente do /appointments/reschedule (que só sinaliza "Remarcar"). Endpoint do tool reschedule_appointment.
+     */
+    @PostMapping("/appointments/reschedule-to")
+    public ResponseEntity<Map<String, Object>> rescheduleTo(
+            @Valid @RequestBody BotRescheduleRequest req) {
+        Appointment a = botService.rescheduleNextByPhone(req);
+        return ResponseEntity.ok(Map.of(
+                "appointmentId", a.getId(),
+                "status", a.getStatus(),
+                "date", a.getDate(),
+                "time", a.getTime(),
+                "dentistName", a.getDentist().getName(),
+                "patientName", a.getPatientName()
+        ));
     }
 
     @PostMapping("/conversations/{phone}/messages")
