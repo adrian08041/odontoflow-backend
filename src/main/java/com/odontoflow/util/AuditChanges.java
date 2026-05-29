@@ -16,6 +16,12 @@ import java.util.Map;
 /**
  * Helper para construir o payload `changes` dos AuditLog. Mantém snapshots compactos
  * (só campos relevantes) e fora dos services de domínio.
+ *
+ * <p><b>Atenção:</b> as chaves dos maps abaixo são lidas por {@link AuditSummary}
+ * (back) e por {@code lib/utils/audit-helpers.ts#extractEntitySummary} (front).
+ * Ao renomear/remover um campo aqui, atualizar também esses dois consumidores —
+ * caso contrário a descrição contextual dos logs vira {@code null}
+ * silenciosamente.
  */
 public final class AuditChanges {
 

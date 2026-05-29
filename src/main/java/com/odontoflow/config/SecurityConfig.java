@@ -33,7 +33,7 @@ public class SecurityConfig {
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/auth/**", "/swagger-ui/**", "/v3/api-docs/**",
-                                         "/swagger-ui.html", "/webhook/whatsapp/**").permitAll()
+                                         "/swagger-ui.html", "/webhook/whatsapp/**", "/error").permitAll()
                 .anyRequest().authenticated()
                 )
         .addFilterBefore(whatsAppApiKeyFilter,

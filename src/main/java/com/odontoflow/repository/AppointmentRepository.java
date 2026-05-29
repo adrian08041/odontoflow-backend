@@ -23,6 +23,25 @@ public interface AppointmentRepository extends JpaRepository<Appointment, UUID> 
             @Param("dentistId") UUID dentistId
     );
 
+    // Queries dedicadas do bot WhatsApp (Fase 2) — sem o padrão ':param IS NULL',
+    // que no PostgreSQL falha com "could not determine data type of parameter".
+    @Query("SELECT a FROM Appointment a WHERE a.deletedAt IS NULL " +
+           "AND a.date = :date AND a.dentist.id = :dentistId " +
+           "ORDER BY a.time ASC")
+    List<Appointment> findActiveByDateAndDentist(
+            @Param("date") LocalDate date,
+            @Param("dentistId") UUID dentistId
+    );
+
+    @Query("SELECT a FROM Appointment a WHERE a.deletedAt IS NULL " +
+           "AND a.patient.id = :patientId AND a.date >= :from " +
+           "AND a.status <> 'Cancelado' " +
+           "ORDER BY a.date ASC, a.time ASC")
+    List<Appointment> findUpcomingActiveByPatient(
+            @Param("patientId") UUID patientId,
+            @Param("from") LocalDate from
+    );
+
     @Query("SELECT a FROM Appointment a WHERE a.id = :id AND a.deletedAt IS NULL")
     Optional<Appointment> findActiveById(@Param("id") UUID id);
 
