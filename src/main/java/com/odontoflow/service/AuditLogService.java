@@ -99,9 +99,9 @@ public class AuditLogService {
             String safeUserName = truncate(userName != null ? userName : SYSTEM_USER_NAME, 120);
             AuditLog entry = AuditLog.builder()
                     .entity(entity)
-                    .entityId(entityId)
+                    .entityId(entityId != null ? entityId : nilUuid())
                     .action(action)
-                    .userId(userId != null ? userId : nilUserId())
+                    .userId(userId != null ? userId : nilUuid())
                     .userName(safeUserName)
                     .changes(serialize(changes))
                     .ipAddress(currentIp())
@@ -172,8 +172,12 @@ public class AuditLogService {
         return value.length() <= max ? value : value.substring(0, max);
     }
 
-    /** Placeholder para casos raros onde userId é nulo (jobs scheduled, bootstrap). */
-    private UUID nilUserId() {
+    /**
+     * UUID nulo (00000000-...-0) para colunas NOT NULL quando não há valor real:
+     * userId em jobs scheduled/bootstrap, ou entityId em eventos sem entidade-alvo
+     * (ex: handoff do bot WhatsApp, que registra uma conversa, não uma entidade).
+     */
+    private UUID nilUuid() {
         return new UUID(0L, 0L);
     }
 }
