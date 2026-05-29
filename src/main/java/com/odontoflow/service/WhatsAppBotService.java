@@ -103,6 +103,19 @@ public class WhatsAppBotService {
 
     @Transactional
     public Appointment createAppointment(BotAppointmentRequest req) {
+        // Idempotência: se o MESMO paciente já tem consulta ativa neste slot, devolve ela.
+        // Cobre o double tool-call do AI Agent (n8n) — sem isso, a 2ª chamada recebia 400
+        // "Slot já ocupado" apesar de a 1ª ter criado, e o bot reportava erro de uma operação
+        // bem-sucedida. Slot ocupado por OUTRO paciente continua caindo no 400 abaixo.
+        Optional<Appointment> duplicate = appointmentRepository
+                .findActiveByDateAndDentist(req.date(), req.dentistId()).stream()
+                .filter(a -> req.time().equals(a.getTime()))
+                .filter(a -> !"Cancelado".equals(a.getStatus()))
+                .filter(a -> a.getPatient() != null && req.patientId().equals(a.getPatient().getId()))
+                .findFirst();
+        if (duplicate.isPresent()) {
+            return duplicate.get();
+        }
         if (!availabilityService.isSlotFree(req.dentistId(), req.date(), req.time())) {
             throw new BusinessException("Slot já ocupado");
         }

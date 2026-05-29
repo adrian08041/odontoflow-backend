@@ -12,9 +12,13 @@ import java.util.UUID;
 
 public interface AppointmentRepository extends JpaRepository<Appointment, UUID> {
 
+    // CAST(:x AS date) nos params temporais: o PostgreSQL não infere o tipo de um
+    // parâmetro usado só em `IS NULL` e falha na preparação do statement com
+    // "could not determine data type of parameter" — independe do valor passado.
+    // UUID/String não precisam (mesmo padrão do AuditLogRepository.findFiltered).
     @Query("SELECT a FROM Appointment a WHERE a.deletedAt IS NULL AND " +
-           "(:startDate IS NULL OR a.date >= :startDate) AND " +
-           "(:endDate IS NULL OR a.date <= :endDate) AND " +
+           "(CAST(:startDate AS date) IS NULL OR a.date >= :startDate) AND " +
+           "(CAST(:endDate AS date) IS NULL OR a.date <= :endDate) AND " +
            "(:dentistId IS NULL OR a.dentist.id = :dentistId) " +
            "ORDER BY a.date ASC, a.time ASC")
     List<Appointment> findAllFiltered(
