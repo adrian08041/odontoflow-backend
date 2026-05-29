@@ -18,11 +18,15 @@ import java.util.UUID;
 public interface FinanceReceivableRepository extends JpaRepository<FinanceReceivable, UUID> {
 
     @Query("SELECT r FROM FinanceReceivable r WHERE r.deletedAt IS NULL AND " +
+           "(:search IS NULL OR :search = '' OR " +
+           " LOWER(r.patientName) LIKE LOWER(CONCAT('%', :search, '%')) OR " +
+           " LOWER(r.description) LIKE LOWER(CONCAT('%', :search, '%'))) AND " +
            "(:status IS NULL OR r.status = :status) AND " +
            "(:type IS NULL OR r.type = :type) AND " +
            "(:patientId IS NULL OR r.patient.id = :patientId) " +
            "ORDER BY r.due DESC")
     Page<FinanceReceivable> findAllFiltered(
+            @Param("search") String search,
             @Param("status") FinanceStatus status,
             @Param("type") TransactionType type,
             @Param("patientId") UUID patientId,
