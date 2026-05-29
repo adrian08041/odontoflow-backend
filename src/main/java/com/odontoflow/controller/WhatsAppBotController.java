@@ -75,6 +75,23 @@ public class WhatsAppBotController {
         return ResponseEntity.ok().build();
     }
 
+    /**
+     * Cancela a próxima consulta ativa do paciente por telefone — evita o LLM ter que transcrever
+     * o appointmentId (UUID), que ele alucina. É o endpoint que o tool cancel_appointment usa.
+     */
+    @PostMapping("/appointments/cancel")
+    public ResponseEntity<Void> cancelByPhone(@RequestParam String phone) {
+        botService.cancelNextByPhone(phone);
+        return ResponseEntity.ok().build();
+    }
+
+    /** Pede remarcação da próxima consulta ativa do paciente por telefone (mesmo motivo do cancel). */
+    @PostMapping("/appointments/reschedule")
+    public ResponseEntity<Void> rescheduleByPhone(@RequestParam String phone) {
+        botService.requestRescheduleByPhone(phone);
+        return ResponseEntity.ok().build();
+    }
+
     @PostMapping("/conversations/{phone}/messages")
     public ResponseEntity<ConversationMessageResponse> appendMessage(
             @PathVariable String phone,

@@ -251,6 +251,31 @@ public class WhatsAppBotService {
                 appointmentId, ReminderAction.RESCHEDULE_REQUESTED, java.time.LocalDateTime.now());
     }
 
+    /**
+     * Cancela a PRÓXIMA consulta ativa do paciente, resolvida por telefone. O AI Agent só conhece
+     * a próxima consulta (nextAppointment do contexto) e alucina UUIDs opacos — então operamos por
+     * telefone em vez de exigir o appointmentId transcrito, mesmo motivo do create por phone/nome.
+     */
+    @Transactional
+    public void cancelNextByPhone(String phone) {
+        cancelAppointment(resolveNextActiveByPhone(phone).getId());
+    }
+
+    /** Pede remarcação da próxima consulta ativa do paciente, resolvida por telefone. */
+    @Transactional
+    public void requestRescheduleByPhone(String phone) {
+        requestReschedule(resolveNextActiveByPhone(phone).getId());
+    }
+
+    private Appointment resolveNextActiveByPhone(String phone) {
+        Patient patient = resolvePatientByPhone(phone)
+                .orElseThrow(() -> new BusinessException("Paciente não encontrado para este telefone"));
+        return appointmentRepository
+                .findUpcomingActiveByPatient(patient.getId(), LocalDate.now())
+                .stream().findFirst()
+                .orElseThrow(() -> new BusinessException("Não há consulta futura para este paciente."));
+    }
+
     @Transactional
     public HandoffResponse handoff(HandoffRequest req) {
         Map<String, Object> changes = Map.of(

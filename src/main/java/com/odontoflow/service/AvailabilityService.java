@@ -45,6 +45,11 @@ public class AvailabilityService {
         if (from == null || to == null) {
             throw new BusinessException("Parâmetros 'from' e 'to' obrigatórios");
         }
+        // O AI Agent (LLM) alucina o ANO (chama com 2024). Reinterpretamos datas passadas no ano
+        // que as torna futuras, pra nunca devolver slots de dias que já passaram — que o bot
+        // ofereceria e o create depois rejeitaria. Datas já futuras passam intactas.
+        from = bumpToFutureYear(from);
+        to = bumpToFutureYear(to);
         if (to.isBefore(from)) {
             throw new BusinessException("'to' deve ser >= 'from'");
         }
@@ -72,6 +77,9 @@ public class AvailabilityService {
         for (Dentist d : dentists) {
             List<AvailabilitySlotResponse.Slot> slots = new ArrayList<>();
             for (LocalDate day = from; !day.isAfter(to); day = day.plusDays(1)) {
+                if (day.isBefore(LocalDate.now())) {
+                    continue; // nunca oferece data passada (defensivo, além do bump em from/to)
+                }
                 ClinicHour h = hoursByDay.get(day.getDayOfWeek());
                 if (h == null || !h.isActive() || h.getStart() == null || h.getEnd() == null) {
                     continue;
@@ -104,6 +112,30 @@ public class AvailabilityService {
         return appointmentRepository.findActiveByDateAndDentist(date, dentistId).stream()
                 .filter(a -> !"Cancelado".equals(a.getStatus()))
                 .noneMatch(a -> time.equals(a.getTime()));
+    }
+
+    /**
+     * Reinterpreta uma data possivelmente no passado (LLM alucina o ano, ex 2024) para o ano
+     * que a torna futura. Mantém dia/mês. Datas já futuras passam sem alteração.
+     */
+    private LocalDate bumpToFutureYear(LocalDate d) {
+        LocalDate today = LocalDate.now();
+        if (!d.isBefore(today)) {
+            return d;
+        }
+        LocalDate bumped = safeWithYear(d, today.getYear());
+        if (bumped.isBefore(today)) {
+            bumped = safeWithYear(d, today.getYear() + 1);
+        }
+        return bumped;
+    }
+
+    /** withYear tolerando 29/02 em ano não-bissexto (recua para 28/02). */
+    private LocalDate safeWithYear(LocalDate d, int year) {
+        if (d.getMonthValue() == 2 && d.getDayOfMonth() == 29 && !java.time.Year.isLeap(year)) {
+            return LocalDate.of(year, 2, 28);
+        }
+        return d.withYear(year);
     }
 
     private int parseMinutes(String raw) {

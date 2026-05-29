@@ -66,6 +66,7 @@ public class SettingsController {
     // ---------- Horários ----------
 
     @GetMapping("/hours")
+    @PreAuthorize("hasAnyRole('ADMIN', 'RECEPCIONISTA')")
     @Operation(summary = "Horários de funcionamento", description = "Dias da semana + duração da consulta + intervalo")
     @ApiResponse(responseCode = "200", description = "Horários retornados")
     public ResponseEntity<HoursResponse> getHours() {
@@ -73,6 +74,7 @@ public class SettingsController {
     }
 
     @PutMapping("/hours")
+    @PreAuthorize("hasAnyRole('ADMIN', 'RECEPCIONISTA')")
     @Operation(summary = "Atualizar horários", description = "Substitui completamente a lista de dias e atualiza duração/intervalo")
     @ApiResponse(responseCode = "200", description = "Horários atualizados")
     @ApiResponse(responseCode = "400", description = "Validação falhou (lista vazia, duração/intervalo ausentes)")
@@ -83,8 +85,8 @@ public class SettingsController {
     // ---------- Convênios ----------
 
     @GetMapping("/insurances")
-    @PreAuthorize("hasAnyRole('ADMIN', 'RECEPCIONISTA')")
-    @Operation(summary = "Listar convênios", description = "Convênios cadastrados, ordenados por nome")
+    @PreAuthorize("hasAnyRole('ADMIN', 'DENTISTA', 'RECEPCIONISTA')")
+    @Operation(summary = "Listar convênios", description = "Convênios cadastrados, ordenados por nome. Leitura liberada a todos os cargos (usado no cadastro de paciente)")
     @ApiResponse(responseCode = "200", description = "Lista de convênios")
     public ResponseEntity<List<InsuranceResponse>> listInsurances() {
         return ResponseEntity.ok(settingsService.listInsurances());

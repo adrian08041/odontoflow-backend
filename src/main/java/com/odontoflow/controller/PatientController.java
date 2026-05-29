@@ -52,7 +52,7 @@ public class PatientController {
     @ApiResponse(responseCode = "200", description = "Paciente encontrado")
     @ApiResponse(responseCode = "400", description = "Paciente não encontrado")
     public ResponseEntity<Patient> findById(@PathVariable UUID id) {
-        return ResponseEntity.ok(patientService.findById(id));
+        return ResponseEntity.ok(patientService.findByIdWithActivity(id));
     }
 
     @PostMapping

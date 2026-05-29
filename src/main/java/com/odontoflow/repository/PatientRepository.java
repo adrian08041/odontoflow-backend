@@ -25,13 +25,20 @@ public interface PatientRepository extends JpaRepository<Patient, UUID> {
             "p.cpf LIKE CONCAT('%', :search, '%'))")
     Page<Patient> searchActive(@Param("search") String search, Pageable pageable);
 
+    // Status derivado da atividade (não da coluna armazenada, que não é mantida):
+    // Ativo ⟺ existe consulta não-cancelada com date >= threshold (hoje − janela de inatividade),
+    // o que cobre tanto visita recente quanto consulta futura. statusActive: null = sem filtro,
+    // TRUE = só ativos, FALSE = só inativos.
     @Query("SELECT p FROM Patient p WHERE p.deletedAt IS NULL AND " +
             "(:search IS NULL OR LOWER(CAST(p.name AS String)) LIKE LOWER(CONCAT('%', CAST(:search AS String), '%')) OR CAST(p.cpf AS String) LIKE CONCAT('%', CAST(:search AS String), '%')) AND " +
             "(:insurance IS NULL OR p.insurance = CAST(:insurance AS String)) AND " +
-            "(:status IS NULL OR p.status = CAST(:status AS String))")
+            "(:statusActive IS NULL OR " +
+            " (:statusActive = TRUE AND EXISTS (SELECT 1 FROM Appointment a WHERE a.patient = p AND a.deletedAt IS NULL AND a.status <> 'Cancelado' AND a.date >= :threshold)) OR " +
+            " (:statusActive = FALSE AND NOT EXISTS (SELECT 1 FROM Appointment a WHERE a.patient = p AND a.deletedAt IS NULL AND a.status <> 'Cancelado' AND a.date >= :threshold)))")
     Page<Patient> findFiltered(@Param("search") String search,
                                @Param("insurance") String insurance,
-                               @Param("status") String status,
+                               @Param("statusActive") Boolean statusActive,
+                               @Param("threshold") java.time.LocalDate threshold,
                                Pageable pageable);
 
     @Query("SELECT DISTINCT p.insurance FROM Patient p WHERE p.deletedAt IS NULL AND p.insurance IS NOT NULL ORDER BY p.insurance")

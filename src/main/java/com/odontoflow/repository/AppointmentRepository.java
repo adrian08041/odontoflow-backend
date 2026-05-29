@@ -51,6 +51,26 @@ public interface AppointmentRepository extends JpaRepository<Appointment, UUID> 
     @Query("SELECT a FROM Appointment a WHERE a.id = :id AND a.deletedAt IS NULL")
     Optional<Appointment> findActiveById(@Param("id") UUID id);
 
+    // Atividade do paciente (status Ativo/Inativo + última visita derivados das consultas).
+    // Última visita = consulta mais recente já realizada (date <= hoje), ignorando canceladas.
+    @Query("SELECT a.patient.id, MAX(a.date) FROM Appointment a " +
+           "WHERE a.deletedAt IS NULL AND a.status <> 'Cancelado' " +
+           "AND a.date <= :today AND a.patient.id IN :patientIds " +
+           "GROUP BY a.patient.id")
+    List<Object[]> findLastVisitByPatients(
+            @Param("patientIds") List<UUID> patientIds,
+            @Param("today") LocalDate today
+    );
+
+    // Pacientes com consulta futura agendada (date >= hoje) — considerados ativos.
+    @Query("SELECT DISTINCT a.patient.id FROM Appointment a " +
+           "WHERE a.deletedAt IS NULL AND a.status <> 'Cancelado' " +
+           "AND a.date >= :today AND a.patient.id IN :patientIds")
+    List<UUID> findPatientIdsWithUpcoming(
+            @Param("patientIds") List<UUID> patientIds,
+            @Param("today") LocalDate today
+    );
+
     @Query("SELECT a FROM Appointment a WHERE a.deletedAt IS NULL AND a.date = :date " +
            "ORDER BY a.time ASC")
     List<Appointment> findByDate(@Param("date") LocalDate date);
