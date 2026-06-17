@@ -33,6 +33,7 @@ public class AvailabilityService {
 
     private static final int MAX_WINDOW_DAYS = 7;
     private static final Pattern MINUTES = Pattern.compile("(\\d+)\\s*min");
+    private static final int GRID_MINUTES = 30;
 
     private final ClinicRepository clinicRepository;
     private final DentistRepository dentistRepository;
@@ -45,9 +46,7 @@ public class AvailabilityService {
         if (from == null || to == null) {
             throw new BusinessException("Parâmetros 'from' e 'to' obrigatórios");
         }
-        // O AI Agent (LLM) alucina o ANO (chama com 2024). Reinterpretamos datas passadas no ano
-        // que as torna futuras, pra nunca devolver slots de dias que já passaram — que o bot
-        // ofereceria e o create depois rejeitaria. Datas já futuras passam intactas.
+
         from = bumpToFutureYear(from);
         to = bumpToFutureYear(to);
         if (to.isBefore(from)) {
@@ -64,7 +63,7 @@ public class AvailabilityService {
                 ? durationMinOverride
                 : parseMinutes(clinic.getDuracaoConsulta());
         int intervalMin = parseMinutes(clinic.getIntervalo());
-        int stride = slotDurationMin + intervalMin;
+        int stride = alignUpToGrid(Math.max(slotDurationMin + intervalMin, GRID_MINUTES));
 
         Map<DayOfWeek, ClinicHour> hoursByDay = mapHoursByDay(clinic);
 
@@ -91,7 +90,7 @@ public class AvailabilityService {
                         .map(Appointment::getTime)
                         .collect(Collectors.toCollection(HashSet::new));
 
-                LocalTime cursor = LocalTime.parse(h.getStart());
+                LocalTime cursor = alignUpToGrid(LocalTime.parse(h.getStart()));
                 LocalTime end = LocalTime.parse(h.getEnd());
                 while (!cursor.plusMinutes(slotDurationMin).isAfter(end)) {
                     String hhmm = cursor.toString().substring(0, 5); // garante HH:mm
@@ -106,7 +105,6 @@ public class AvailabilityService {
         return result;
     }
 
-    /** Tenta achar slot ocupado pra validar antes de criar appointment. */
     @Transactional(readOnly = true)
     public boolean isSlotFree(UUID dentistId, LocalDate date, String time) {
         return appointmentRepository.findActiveByDateAndDentist(date, dentistId).stream()
@@ -114,10 +112,6 @@ public class AvailabilityService {
                 .noneMatch(a -> time.equals(a.getTime()));
     }
 
-    /**
-     * Igual ao {@link #isSlotFree}, mas ignora a consulta {@code excludeAppointmentId} — usado na
-     * remarcação, onde a própria consulta sendo movida não deve contar como ocupando o slot de destino.
-     */
     @Transactional(readOnly = true)
     public boolean isSlotFreeExcluding(UUID dentistId, LocalDate date, String time, UUID excludeAppointmentId) {
         return appointmentRepository.findActiveByDateAndDentist(date, dentistId).stream()
@@ -126,10 +120,7 @@ public class AvailabilityService {
                 .noneMatch(a -> time.equals(a.getTime()));
     }
 
-    /**
-     * Reinterpreta uma data possivelmente no passado (LLM alucina o ano, ex 2024) para o ano
-     * que a torna futura. Mantém dia/mês. Datas já futuras passam sem alteração.
-     */
+
     private LocalDate bumpToFutureYear(LocalDate d) {
         LocalDate today = LocalDate.now();
         if (!d.isBefore(today)) {
@@ -142,12 +133,20 @@ public class AvailabilityService {
         return bumped;
     }
 
-    /** withYear tolerando 29/02 em ano não-bissexto (recua para 28/02). */
     private LocalDate safeWithYear(LocalDate d, int year) {
         if (d.getMonthValue() == 2 && d.getDayOfMonth() == 29 && !java.time.Year.isLeap(year)) {
             return LocalDate.of(year, 2, 28);
         }
         return d.withYear(year);
+    }
+
+    private static int alignUpToGrid(int minutes) {
+        return ((minutes + GRID_MINUTES - 1) / GRID_MINUTES) * GRID_MINUTES;
+    }
+
+    private static LocalTime alignUpToGrid(LocalTime t) {
+        int aligned = alignUpToGrid(t.getHour() * 60 + t.getMinute());
+        return aligned >= 24 * 60 ? LocalTime.MAX : LocalTime.of(aligned / 60, aligned % 60);
     }
 
     private int parseMinutes(String raw) {
@@ -157,10 +156,7 @@ public class AvailabilityService {
         try { return Integer.parseInt(raw.trim()); } catch (NumberFormatException e) { return 30; }
     }
 
-    /**
-     * Mapeia ClinicHour.label/position para DayOfWeek. A clínica usa rótulos em PT-BR;
-     * inferimos por label primeiro (case-insensitive) com fallback por position.
-     */
+
     private Map<DayOfWeek, ClinicHour> mapHoursByDay(Clinic clinic) {
         Map<String, DayOfWeek> aliases = Map.of(
                 "segunda", DayOfWeek.MONDAY,
