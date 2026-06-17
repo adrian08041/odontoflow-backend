@@ -103,11 +103,15 @@ public class AvailabilityService {
                         .collect(Collectors.toCollection(HashSet::new));
 
                 String dayLabel = formatDayLabel(day);
+                boolean isToday = day.isEqual(today);
+                LocalTime nowTime = LocalTime.now();
                 LocalTime cursor = alignUpToGrid(LocalTime.parse(h.getStart()));
                 LocalTime end = LocalTime.parse(h.getEnd());
                 while (!cursor.plusMinutes(slotDurationMin).isAfter(end)) {
                     String hhmm = cursor.toString().substring(0, 5); // garante HH:mm
-                    if (!occupied.contains(hhmm)) {
+                    // No dia de hoje, descarta horários cujo início já passou (<= agora).
+                    boolean alreadyPassed = isToday && !cursor.isAfter(nowTime);
+                    if (!alreadyPassed && !occupied.contains(hhmm)) {
                         slots.add(new AvailabilitySlotResponse.Slot(day, hhmm, dayLabel));
                     }
                     cursor = cursor.plusMinutes(stride);
