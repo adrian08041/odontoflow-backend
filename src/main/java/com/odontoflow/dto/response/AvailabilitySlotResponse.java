@@ -9,5 +9,10 @@ public record AvailabilitySlotResponse(
         String dentistName,
         List<Slot> slots
 ) {
-    public record Slot(LocalDate date, String time) {}
+    /**
+     * {@code date} (YYYY-MM-DD) e {@code time} (HH:mm) são para o agendamento; {@code label}
+     * é o texto pronto em PT-BR ("17/06 (quarta-feira)") para o bot exibir sem ter que
+     * calcular o dia da semana (o LLM erra esse cálculo).
+     */
+    public record Slot(LocalDate date, String time, String label) {}
 }

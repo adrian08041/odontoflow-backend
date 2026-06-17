@@ -34,6 +34,11 @@ public class AvailabilityService {
     private static final int MAX_WINDOW_DAYS = 7;
     private static final Pattern MINUTES = Pattern.compile("(\\d+)\\s*min");
     private static final int GRID_MINUTES = 30;
+    /** Dias da semana em PT-BR indexados por {@link DayOfWeek#getValue()} (1=segunda … 7=domingo). */
+    private static final String[] WEEKDAY_PT = {
+            "segunda-feira", "terça-feira", "quarta-feira", "quinta-feira",
+            "sexta-feira", "sábado", "domingo"
+    };
 
     private final ClinicRepository clinicRepository;
     private final DentistRepository dentistRepository;
@@ -47,10 +52,17 @@ public class AvailabilityService {
             throw new BusinessException("Parâmetros 'from' e 'to' obrigatórios");
         }
 
-        from = bumpToFutureYear(from);
-        to = bumpToFutureYear(to);
+        // O AI Agent (LLM) às vezes chama com ano errado (2024/2025) ou com datas de mês/dia
+        // já passado. Sem normalizar, o bot oferecia slots no passado ("10/06") ou saltava um
+        // ano inteiro. Garantimos sempre uma janela futura próxima:
+        LocalDate today = LocalDate.now();
+        from = bringYearToCurrent(from, today); // ano anterior ao corrente → ano corrente
+        to = bringYearToCurrent(to, today);
+        if (from.isBefore(today)) {
+            from = today; // nunca começa no passado (mês/dia já passou no ano corrente)
+        }
         if (to.isBefore(from)) {
-            throw new BusinessException("'to' deve ser >= 'from'");
+            to = from.plusDays(MAX_WINDOW_DAYS - 1); // janela invertida/passada → reabre padrão
         }
         if (ChronoUnit.DAYS.between(from, to) > MAX_WINDOW_DAYS) {
             throw new BusinessException("Janela máxima é de " + MAX_WINDOW_DAYS + " dias");
@@ -90,12 +102,13 @@ public class AvailabilityService {
                         .map(Appointment::getTime)
                         .collect(Collectors.toCollection(HashSet::new));
 
+                String dayLabel = formatDayLabel(day);
                 LocalTime cursor = alignUpToGrid(LocalTime.parse(h.getStart()));
                 LocalTime end = LocalTime.parse(h.getEnd());
                 while (!cursor.plusMinutes(slotDurationMin).isAfter(end)) {
                     String hhmm = cursor.toString().substring(0, 5); // garante HH:mm
                     if (!occupied.contains(hhmm)) {
-                        slots.add(new AvailabilitySlotResponse.Slot(day, hhmm));
+                        slots.add(new AvailabilitySlotResponse.Slot(day, hhmm, dayLabel));
                     }
                     cursor = cursor.plusMinutes(stride);
                 }
@@ -121,16 +134,16 @@ public class AvailabilityService {
     }
 
 
-    private LocalDate bumpToFutureYear(LocalDate d) {
-        LocalDate today = LocalDate.now();
-        if (!d.isBefore(today)) {
-            return d;
-        }
-        LocalDate bumped = safeWithYear(d, today.getYear());
-        if (bumped.isBefore(today)) {
-            bumped = safeWithYear(d, today.getYear() + 1);
-        }
-        return bumped;
+    /** Ano anterior ao corrente (LLM alucina 2024/2025) → traz para o ano corrente, preservando mês/dia. */
+    private LocalDate bringYearToCurrent(LocalDate d, LocalDate today) {
+        return d.getYear() < today.getYear() ? safeWithYear(d, today.getYear()) : d;
+    }
+
+    /** Texto pronto para o bot exibir: "17/06 (quarta-feira)" — evita o LLM calcular o dia da semana. */
+    private static String formatDayLabel(LocalDate day) {
+        return String.format("%02d/%02d (%s)",
+                day.getDayOfMonth(), day.getMonthValue(),
+                WEEKDAY_PT[day.getDayOfWeek().getValue() - 1]);
     }
 
     private LocalDate safeWithYear(LocalDate d, int year) {
